@@ -14,7 +14,6 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
 | `apps` | Argo CD (ApplicationSet) | Workloads on the golden path, one directory per app (see [Apps](#apps)) |
 | `charts/platform-gateway` | Argo CD | Shared Gateway API entrypoint: GatewayClass, Gateway, TLS, HTTPRoutes |
-| `apps` | Tenants | One directory per application, deployed by the `apps` ApplicationSet (see [Tenant apps](#tenancy)) |
 | `backstage/templates` | Backstage | Software templates (golden paths) |
 | `catalog-info.yaml` | Backstage | Software catalog: system, components, team |
 | `scripts` | — | Workstation setup (Docker Engine in WSL) |
@@ -25,7 +24,7 @@ Sync waves under `gitops/platform`:
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
 4. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
-5. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenant apps](#tenancy))
+5. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenancy](#tenancy))
 6. `backstage` (wave 1): developer portal (see [Developer portal](#developer-portal))
 
 ## Requirements
