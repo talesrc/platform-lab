@@ -91,6 +91,16 @@ jobs:
           echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
       - name: kyverno test (every kyverno-test.yaml under gitops/)
         run: kyverno test gitops/
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Install PyYAML
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/venv"
+          "${RUNNER_TEMP}/venv/bin/pip" install --quiet "pyyaml==${PYYAML_VERSION}"
+          echo "${RUNNER_TEMP}/venv/bin" >> "${GITHUB_PATH}"
+      - name: Golden path (every apps/* passes all lab policies)
+        run: scripts/ci/check-app-policies.sh
 
   commitlint:
     name: Conventional Commits
