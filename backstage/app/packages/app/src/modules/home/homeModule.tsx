@@ -1,52 +1,47 @@
 import { createFrontendModule } from '@backstage/frontend-plugin-api';
 import { HomePageWidgetBlueprint } from '@backstage/plugin-home-react/alpha';
-import { MarkdownContent } from '@backstage/core-components';
+import { LinkButton, MarkdownContent } from '@backstage/core-components';
+import Box from '@material-ui/core/Box';
 
 const content = `
-## Welcome to Backstage! 👋
+**platform-lab** is TALECOs' internal developer platform. Every service here is
+described in the [catalog](/catalog) and deployed from git by Argo CD.
 
-Backstage is your developer portal — a single place to manage all your
-software, services, and documentation.
+### Ship a service in three steps
 
-### Quick Start
+1. **Create** — fill in the golden-path form. It renders the manifests for you.
+2. **Review and merge** the pull request it opens on \`talesrc/platform-lab\`.
+3. **Argo CD deploys it** to namespace \`app-<name>\`, live at
+   \`https://<name>.apps.lab.localhost\`, with Prometheus scraping and dashboards.
 
-- **Explore the catalog** — Browse all your organization's software in
-  the [Software Catalog](/catalog)
-- **Create something new** — Use a [Software Template](/create) to
-  scaffold a new project in minutes
-- **Read the docs** — Find technical documentation for any service
-  right from its catalog page
-
-### Helpful Links
-
-- [Backstage Documentation](https://backstage.io/docs)
-- [Customizing Your Homepage](https://backstage.io/docs/getting-started/homepage)
-- [Adding Plugins](https://backstage.io/docs/plugins)
-- [Contributing](https://github.com/backstage/backstage/blob/master/CONTRIBUTING.md)
-
-### How to Edit This Card
-
-This widget is defined in \`packages/app/src/modules/home/homeModule.tsx\`.
-You can update the markdown content there to welcome your team with
-your own links and getting started tips.
-
-To remove this card entirely, delete the getting started widget and
-remove it from the home module's extensions array in this file.
+Each service page shows its pods, Argo CD sync status and Grafana dashboards.
 `;
 
-const gettingStartedWidget = HomePageWidgetBlueprint.make({
-  name: 'getting-started',
+const welcomeWidget = HomePageWidgetBlueprint.make({
+  name: 'welcome',
   params: {
-    name: 'GettingStarted',
-    title: 'Getting Started',
-    description: 'Tips and links to help you get started with Backstage',
+    name: 'Welcome',
+    title: 'Welcome to platform-lab',
+    description: 'How the golden path takes a service from form to running',
     components: async () => ({
-      Content: () => <MarkdownContent content={content} />,
+      Content: () => (
+        <>
+          <MarkdownContent content={content} />
+          <Box display="flex" flexWrap="wrap" mt={2} style={{ gap: 12 }}>
+            <LinkButton to="/create" variant="contained" color="primary">
+              Create a service
+            </LinkButton>
+            <LinkButton to="/catalog" variant="outlined" color="primary">
+              Browse the catalog
+            </LinkButton>
+          </Box>
+        </>
+      ),
     }),
   },
 });
 
 export const homeModule = createFrontendModule({
   pluginId: 'home',
-  extensions: [gettingStartedWidget],
+  extensions: [welcomeWidget],
 });
