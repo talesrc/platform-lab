@@ -133,8 +133,7 @@ resource "helm_release" "argocd_apps" {
 }
 
 # Backstage (gitops/platform/backstage.yaml) runs in this namespace. It is created here,
-# not by Argo CD, so the platform-gateway HTTPRoute (wave 0) never races Backstage
-# (wave 1), and so the optional token Secret below has somewhere to live.
+# not by Argo CD, so the optional Secrets below exist before Backstage (wave -1) starts.
 resource "kubernetes_namespace_v1" "backstage" {
   metadata {
     name = "backstage"
@@ -144,7 +143,7 @@ resource "kubernetes_namespace_v1" "backstage" {
 # GitHub token for Backstage's scaffolder (opening PRs) and catalog reads. Never in git:
 # set backstage_github_token in terraform.tfvars. Without it the portal runs read-only.
 resource "kubernetes_secret_v1" "backstage_github" {
-  count = var.backstage_github_token == null ? 0 : 1
+  count = nonsensitive(var.backstage_github_token != null) ? 1 : 0
 
   metadata {
     name      = "backstage-github"
@@ -153,5 +152,21 @@ resource "kubernetes_secret_v1" "backstage_github" {
 
   data = {
     GITHUB_TOKEN = var.backstage_github_token
+  }
+}
+
+# GitHub OAuth App for Backstage sign-in. Never in git: set backstage_github_oauth in
+# terraform.tfvars. Read by the image's app-config.production.yaml (auth.providers.github).
+resource "kubernetes_secret_v1" "backstage_github_oauth" {
+  count = nonsensitive(var.backstage_github_oauth != null) ? 1 : 0
+
+  metadata {
+    name      = "backstage-github-oauth"
+    namespace = kubernetes_namespace_v1.backstage.metadata[0].name
+  }
+
+  data = {
+    AUTH_GITHUB_CLIENT_ID     = var.backstage_github_oauth.client_id
+    AUTH_GITHUB_CLIENT_SECRET = var.backstage_github_oauth.client_secret
   }
 }

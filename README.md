@@ -228,10 +228,40 @@ or plan output, but it is stored in the local Terraform state and in the `argocd
 
 ## Developer portal
 
-[Backstage](https://backstage.io/) runs at https://backstage.lab.localhost (sign in as guest, mapped to
-`user:default/talesrc`). It is the upstream demo image (`ghcr.io/backstage/backstage`) with
-in-memory SQLite, so there is no database to run: the catalog is reloaded from git on every
-restart.
+[Backstage](https://backstage.io/) runs at https://backstage.lab.localhost. It is **our own
+image**, built from `backstage/app/` (scaffolded with `@backstage/create-app`) by
+`.github/workflows/backstage-image.yaml` and pushed to `ghcr.io/talesrc/platform-lab-backstage`
+(tags `sha-<commit>` and `latest`; `gitops/platform/backstage.yaml` pins a `sha-` tag). The
+lab's configuration is baked into the image (`backstage/app/app-config.production.yaml`):
+in-memory SQLite (no database to run; the catalog is reloaded from git on every restart),
+the catalog locations, and GitHub sign-in. Secrets come only from Kubernetes Secrets.
+
+**Sign-in with GitHub.** The public demo image can only offer guest login (its sign-in page is
+compiled in), which is why the lab builds its own: `packages/app/src/modules/signIn` replaces
+the sign-in page, and the backend uses the GitHub auth provider instead of guest. A GitHub login
+signs in only if a catalog User has the same name (`talesrc` in `catalog-info.yaml`).
+
+1. Create a **second** OAuth App (GitHub allows one callback URL per app, so Argo CD's can't be
+   reused): Homepage URL `https://backstage.lab.localhost`, Authorization callback URL
+   `https://backstage.lab.localhost/api/auth/github/handler/frame`.
+2. Put it in `terraform/platform-addons/terraform.tfvars` (git-ignored) and apply:
+
+   ```hcl
+   backstage_github_oauth = {
+     client_id     = "<client id>"
+     client_secret = "<client secret>"
+   }
+   ```
+
+   Terraform stores it as the `backstage-github-oauth` Secret (`AUTH_GITHUB_CLIENT_ID`,
+   `AUTH_GITHUB_CLIENT_SECRET`). Without it nobody can sign in.
+
+**Changing the portal:** edit `backstage/app/`, push; CI type-checks, builds and pushes a new
+`sha-` image; bump the tag in `gitops/platform/backstage.yaml`. Backstage packages are upgraded
+together (`yarn backstage-cli versions:bump`, or Renovate's grouped `backstage` PR).
+`package.json` pins `@yarnpkg/core` to 4.9.1: 4.9.2 was published with a dependency on a patch
+file that only exists in Yarn's own repository, which breaks fresh installs; drop the
+resolution once a fixed version is out.
 
 - **Catalog:** `catalog-info.yaml` (system `platform-lab`, its components, team and user), read
   from `main` on GitHub every 10 minutes.
