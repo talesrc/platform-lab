@@ -9,7 +9,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 |---|---|---|
 | `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io, ecr-public.aws.com; reg.kyverno.io via ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
-| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD, the root app-of-apps, the `backstage` namespace and its optional GitHub token |
+| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD (with its notifications), the root app-of-apps, the `backstage` and `monitoring` namespaces and their Secrets (optional GitHub token, notification tokens) |
 | `terraform/platform-access` | Terraform | Day-1 access for Backstage's plugins: read-only Argo CD token and Grafana Viewer token, stored in the `backstage` namespace (runs after platform-addons) |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
@@ -21,7 +21,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 
 Sync waves under `gitops/platform`:
 
-1. `cert-manager`, `envoy-gateway` and `kyverno` (wave -2)
+1. `cert-manager`, `envoy-gateway`, `kyverno` and `cloudnative-pg` (wave -2)
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
 4. `backstage` (wave -1): developer portal (see [Developer portal](#developer-portal))
@@ -108,6 +108,9 @@ Grafana user is `admin`; the password is generated in-cluster (never stored in g
 ```bash
 kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
 ```
+
+Alertmanager sends every alert except `Watchdog` to Backstage as a notification for the
+owning team (see [Developer portal](#developer-portal)).
 
 Prometheus selects ServiceMonitors, PodMonitors, Probes and PrometheusRules from every
 namespace. etcd, kube-scheduler, kube-controller-manager and kube-proxy are not scraped:
@@ -256,8 +259,16 @@ image**, built from `backstage/app/` (scaffolded with `@backstage/create-app`) b
 `.github/workflows/backstage-image.yaml` and pushed to `ghcr.io/talesrc/platform-lab-backstage`
 (tags `sha-<commit>` and `latest`; `gitops/platform/backstage.yaml` pins a `sha-` tag). The
 lab's configuration is baked into the image (`backstage/app/app-config.production.yaml`):
-in-memory SQLite (no database to run; the catalog is reloaded from git on every restart),
-the catalog locations, and GitHub sign-in. Secrets come only from Kubernetes Secrets.
+the database, the catalog locations, GitHub sign-in and the tokens platform tools use to call
+Backstage. Secrets come only from Kubernetes Secrets.
+
+**Database.** PostgreSQL run by [CloudNativePG](https://cloudnative-pg.io/): the operator is
+`gitops/platform/cloudnative-pg.yaml`, and a one-instance `Cluster` named `backstage-db`
+(2 GiB volume) ships with the `backstage` Application, which starts the portal only once the
+database is healthy. Backstage reads the generated `backstage-db-app` Secret and keeps every
+plugin in its own schema of the `backstage` database, so notifications, starred entities,
+home page layouts and scaffolder history survive restarts. There are no backups: the data
+lives as long as the kind cluster.
 
 **Sign-in with GitHub.** The public demo image can only offer guest login (its sign-in page is
 compiled in), which is why the lab builds its own: `packages/app/src/modules/signIn` replaces
@@ -291,8 +302,8 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
 The Argo CD and Grafana tokens come from `terraform/platform-access`. It reaches Argo CD with
 the provider's own port-forward, and Grafana with a short-lived `kubectl port-forward`
 (`port-forward.sh`): Terraform is a Go program, and Go doesn't resolve `*.localhost` names the
-way browsers and curl do. Grafana's alerts card only lists Grafana-managed alerts; the lab's
-alerts are Prometheus rules, so use the Alertmanager link.
+way browsers and curl do. Grafana's alerts card only lists Grafana-managed alerts and the lab's
+alerts are Prometheus rules, so the card is turned off; alerts arrive as notifications instead.
 
 **Changing the portal:** edit `backstage/app/`, push; CI builds and pushes a new `sha-` image;
 bump the tag in `gitops/platform/backstage.yaml`. The image is a multi-stage build from source
@@ -304,6 +315,23 @@ together (`yarn backstage-cli versions:bump`, or Renovate's grouped `backstage` 
 `package.json` pins `@yarnpkg/core` to 4.9.1: 4.9.2 was published with a dependency on a patch
 file that only exists in Yarn's own repository, which breaks fresh installs; drop the
 resolution once a fixed version is out.
+
+**Notifications** (the bell in the sidebar) reach the owner of a catalog component, or
+`platform-team` for the platform itself:
+
+| Event | Sent by | To |
+|---|---|---|
+| Golden-path pull request opened | the template's `notification:send` step | whoever ran the template |
+| App deployed (synced and healthy, once per commit) | Argo CD Notifications | the app's owner |
+| App sync failed, app degraded | Argo CD Notifications | the app's owner; `platform-team` for platform Applications |
+| Alert firing / resolved | Alertmanager | owners of the components whose `backstage.io/kubernetes-namespace` is the alert's namespace; otherwise `platform-team` |
+
+Argo CD Notifications (configured in `terraform/platform-addons/notifications.tf`) calls
+Backstage's notifications API for every Application, with no per-app annotations; tenant apps
+are matched to their component by name. Alertmanager's webhook goes to a small backend plugin,
+`backstage/app/packages/backend/src/plugins/alertmanager.ts`; a resolved alert replaces its
+firing notification. Each caller has its own static token, generated by Terraform and limited
+to the one Backstage plugin it calls (`backend.auth.externalAccess`).
 
 - **Catalog:** `catalog-info.yaml` (system `platform-lab`, its components, team and user), read
   from `main` on GitHub every 10 minutes.

@@ -1,6 +1,8 @@
-# Backstage developer portal: software catalog + golden-path templates.
+# Backstage developer portal: software catalog, golden-path templates and notifications,
+# on a CloudNativePG PostgreSQL database.
 # Image: ghcr.io/talesrc/platform-lab-backstage, built from backstage/app.
-# The namespace and the optional GitHub Secrets are created by terraform/platform-addons.
+# The namespace and its Secrets (GitHub, external-access tokens) are created by
+# terraform/platform-addons.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -83,6 +85,45 @@ spec:
                   name: backstage-platform-access
                   key: GRAFANA_TOKEN
                   optional: true
+            # Static tokens Argo CD Notifications and Alertmanager present when they call
+            # Backstage (backend.auth.externalAccess), from terraform/platform-addons. Required:
+            # the config can't load without them.
+            - name: ARGOCD_NOTIFICATIONS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-external-access
+                  key: ARGOCD_NOTIFICATIONS_TOKEN
+            - name: ALERTMANAGER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-external-access
+                  key: ALERTMANAGER_TOKEN
+            # PostgreSQL (backstage-db below); CloudNativePG generates backstage-db-app.
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-db-app
+                  key: host
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-db-app
+                  key: port
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-db-app
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-db-app
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-db-app
+                  key: dbname
           # The configuration lives in the image (backstage/app/app-config.production.yaml).
           appConfig: {}
         # Identity of the Kubernetes plugin (authProvider: serviceAccount, in-cluster token).
@@ -93,6 +134,30 @@ spec:
         # Read-only access to the workload objects the Kubernetes plugin shows, cluster-wide.
         # No Secrets: configmaps are the most sensitive thing it can read.
         extraDeploy:
+          # Backstage's database: one PostgreSQL instance managed by CloudNativePG
+          # (gitops/platform/cloudnative-pg.yaml). Wave -1 inside this Application, so the
+          # Deployment starts only once the database is healthy. Lab sizing, no backups:
+          # the data lives as long as the kind cluster.
+          - apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+            metadata:
+              name: backstage-db
+              annotations:
+                argocd.argoproj.io/sync-wave: "-1"
+            spec:
+              instances: 1
+              storage:
+                size: 2Gi
+              bootstrap:
+                initdb:
+                  database: backstage
+                  owner: backstage
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
           - apiVersion: rbac.authorization.k8s.io/v1
             kind: ClusterRole
             metadata:

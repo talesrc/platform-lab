@@ -97,13 +97,22 @@ resource "helm_release" "argocd" {
         LUA
       }])...)
     }
+    # Deploy, sync-failure and degraded notifications in Backstage (notifications.tf).
+    notifications = local.argocd_notifications
   })]
 
-  # Kept out of the values and plan output; ends up in argocd-secret as dex.github.clientSecret.
-  set_sensitive = local.github_login ? [{
-    name  = "configs.secret.extra.dex\\.github\\.clientSecret"
-    value = var.github_oauth.client_secret
-  }] : []
+  set_sensitive = concat(
+    # Kept out of the values and plan output; ends up in argocd-secret as dex.github.clientSecret.
+    local.github_login ? [{
+      name  = "configs.secret.extra.dex\\.github\\.clientSecret"
+      value = var.github_oauth.client_secret
+    }] : [],
+    # argocd-notifications-secret, referenced as $backstage-token by the backstage webhook.
+    [{
+      name  = "notifications.secret.items.backstage-token"
+      value = random_password.backstage_argocd_notifications.result
+    }],
+  )
 }
 
 # Root "app of apps": everything under gitops.path is reconciled by Argo CD from git.
@@ -139,8 +148,14 @@ resource "helm_release" "argocd_apps" {
     }
   })]
 
-  # The backstage namespace must exist before Argo CD syncs the gateway route into it.
-  depends_on = [helm_release.argocd, kubernetes_namespace_v1.backstage]
+  # The backstage namespace must exist before Argo CD syncs the gateway route into it, and
+  # the callers' tokens before Backstage and Alertmanager (which mount them) start.
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_namespace_v1.backstage,
+    kubernetes_secret_v1.backstage_external_access,
+    kubernetes_secret_v1.alertmanager_backstage,
+  ]
 }
 
 # Backstage (gitops/platform/backstage.yaml) runs in this namespace. It is created here,

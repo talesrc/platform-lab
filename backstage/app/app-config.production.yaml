@@ -1,5 +1,6 @@
 # platform-lab production config, baked into the image. Secrets come from env vars
-# (Kubernetes Secrets created by terraform/platform-addons); nothing secret lives here.
+# (Kubernetes Secrets from terraform/platform-addons, terraform/platform-access and
+# CloudNativePG); nothing secret lives here.
 app:
   title: platform-lab
   baseUrl: https://backstage.lab.localhost
@@ -15,10 +16,37 @@ backend:
     port: 7007
   cors:
     origin: https://backstage.lab.localhost
-  # Lab: in-memory SQLite, no database to run; the catalog is rebuilt from git on restart.
+  # PostgreSQL from CloudNativePG (cluster backstage-db, gitops/platform/backstage.yaml);
+  # the env vars come from its generated backstage-db-app Secret. One database, one schema
+  # per plugin: the app user owns the database but may not create new ones.
   database:
-    client: better-sqlite3
-    connection: ':memory:'
+    client: pg
+    pluginDivisionMode: schema
+    ensureSchemaExists: true
+    connection:
+      host: ${POSTGRES_HOST}
+      port: ${POSTGRES_PORT}
+      user: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}
+      database: ${POSTGRES_DB}
+  auth:
+    # Static tokens for platform tools that call Backstage (terraform/platform-addons
+    # generates them), each limited to the one plugin it needs.
+    externalAccess:
+      # Argo CD Notifications -> POST /api/notifications (deploy, sync failure, degraded).
+      - type: static
+        options:
+          token: ${ARGOCD_NOTIFICATIONS_TOKEN}
+          subject: argocd-notifications
+        accessRestrictions:
+          - plugin: notifications
+      # Alertmanager -> POST /api/alertmanager/webhook (packages/backend/src/plugins).
+      - type: static
+        options:
+          token: ${ALERTMANAGER_TOKEN}
+          subject: alertmanager
+        accessRestrictions:
+          - plugin: alertmanager
 
 integrations:
   github:

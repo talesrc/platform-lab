@@ -67,6 +67,8 @@ backend.add(import('@backstage/plugin-user-settings-backend'));
 
 // notifications and signals plugins
 backend.add(import('@backstage/plugin-notifications-backend'));
+// Alertmanager webhook -> notifications for the owning team (src/plugins/alertmanager.ts)
+backend.add(import('./plugins/alertmanager'));
 backend.add(import('@backstage/plugin-signals-backend'));
 
 // mcp actions plugin

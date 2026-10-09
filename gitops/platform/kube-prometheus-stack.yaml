@@ -73,8 +73,28 @@ spec:
                 memory: 2Gi
 
         alertmanager:
+          # Alerts become Backstage notifications for the team owning the namespace
+          # (backstage/app/packages/backend/src/plugins/alertmanager.ts). Merged into the
+          # chart's config: its inhibit rules and Watchdog -> "null" route stay; `receivers`
+          # is a list, so it is replaced and must keep "null".
+          config:
+            route:
+              receiver: backstage
+            receivers:
+              - name: "null"
+              - name: backstage
+                webhook_configs:
+                  - url: http://backstage.backstage.svc:7007/api/alertmanager/webhook
+                    send_resolved: true
+                    http_config:
+                      authorization:
+                        type: Bearer
+                        # Secret alertmanager-backstage (terraform/platform-addons), mounted below.
+                        credentials_file: /etc/alertmanager/secrets/alertmanager-backstage/token
           alertmanagerSpec:
             externalUrl: https://alertmanager.lab.localhost
+            secrets:
+              - alertmanager-backstage
             resources:
               requests:
                 cpu: 10m
