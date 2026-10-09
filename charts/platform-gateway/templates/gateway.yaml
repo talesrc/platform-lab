@@ -16,7 +16,11 @@ spec:
       port: {{ .Values.gateway.http.port }}
       allowedRoutes:
         namespaces:
-          from: {{ .Values.gateway.allowedRoute }}
+          {{- if and .Values.gateway.https.enabled .Values.gateway.redirectHttpToHttps }}
+          from: Same
+          {{- else }}
+          {{- include "platform-gateway.platformNamespaces" . | nindent 10 }}
+          {{- end }}
     {{- with .Values.gateway.https }}
     {{- if .enabled }}
     - name: https
@@ -30,7 +34,7 @@ spec:
             name: {{ .certificate.secretName }}
       allowedRoutes:
         namespaces:
-          from: {{ $.Values.gateway.allowedRoute }}
+          {{- include "platform-gateway.platformNamespaces" $ | nindent 10 }}
     {{- with $.Values.gateway.appsListener }}
     {{- if .enabled }}
     - name: {{ .name }}

@@ -4,8 +4,13 @@ gatewayClass:
 
 gateway:
   name: platform
-  # Namespaces allowed to attach HTTPRoutes: All | Same
-  allowedRoute: All
+  # Which namespaces may attach HTTPRoutes is least-privilege per listener:
+  # - http: only this release's namespace (the HTTP->HTTPS redirect), or also the
+  #   platform namespaces when https is disabled
+  # - https: only the namespaces of `routes` below (derived, so it can't drift)
+  # - appsListener: namespaces labelled by the apps ApplicationSet (allowedRoutes below)
+  # Otherwise a tenant could attach a route for a platform hostname (e.g. argocd.lab.localhost)
+  # to the http or https listener.
   # nodePorts must match the kind extraPortMappings (terraform/kind-cluster: ingress_node_ports).
   http:
     port: 80
@@ -32,11 +37,14 @@ gateway:
     name: https-apps
     hostname: "*.apps.lab.localhost"
     # Which namespaces may attach routes. Gateway API can't match a name prefix
-    # (app-*), so selecting app namespaces needs a label on them, e.g.
-    #   namespaces: {from: Selector, selector: {matchLabels: {platform-lab/tenant: apps}}}
+    # (app-*), so app namespaces are selected by the label the apps ApplicationSet
+    # puts on every namespace it creates (gitops/manifests/app-tenancy).
     allowedRoutes:
       namespaces:
-        from: All
+        from: Selector
+        selector:
+          matchLabels:
+            app.kubernetes.io/part-of: apps
     certificate:
       secretName: platform-gateway-apps-tls
       issuerRef:
