@@ -1,8 +1,14 @@
+# Multi-stage build: the image compiles from source, so send sources but never local
+# dependencies or build output (the build stage recreates both).
 .git
 .yarn/cache
 .yarn/install-state.gz
 node_modules
-packages/*/src
 packages/*/node_modules
-plugins
+plugins/*/node_modules
+packages/*/dist
+plugins/*/dist
+dist-types
+coverage
 *.local.yaml
+.env*

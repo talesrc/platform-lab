@@ -256,8 +256,12 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
    Terraform stores it as the `backstage-github-oauth` Secret (`AUTH_GITHUB_CLIENT_ID`,
    `AUTH_GITHUB_CLIENT_SECRET`). Without it nobody can sign in.
 
-**Changing the portal:** edit `backstage/app/`, push; CI type-checks, builds and pushes a new
-`sha-` image; bump the tag in `gitops/platform/backstage.yaml`. Backstage packages are upgraded
+**Changing the portal:** edit `backstage/app/`, push; CI builds and pushes a new `sha-` image;
+bump the tag in `gitops/platform/backstage.yaml`. The image is a multi-stage build from source
+(`backstage/app/packages/backend/Dockerfile`: dependency install, `yarn tsc`, bundle, then a
+runtime stage with production dependencies only), so CI just runs `docker build` and a local
+build is one command: `docker build -f packages/backend/Dockerfile .` from `backstage/app`
+(about 5 minutes cold, under 30 seconds after a source-only change). Backstage packages are upgraded
 together (`yarn backstage-cli versions:bump`, or Renovate's grouped `backstage` PR).
 `package.json` pins `@yarnpkg/core` to 4.9.1: 4.9.2 was published with a dependency on a patch
 file that only exists in Yarn's own repository, which breaks fresh installs; drop the
