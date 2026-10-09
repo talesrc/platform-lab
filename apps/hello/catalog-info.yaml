@@ -5,6 +5,11 @@ metadata:
   description: A service on the platform-lab golden path named hello, with tests purpose.
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/hello
+    # Live state on the entity page: pods (Kubernetes), sync/health (Argo CD), dashboards (Grafana).
+    backstage.io/kubernetes-namespace: app-hello
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=hello'
+    argocd/app-name: hello
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
   links:
     - url: https://hello.apps.lab.localhost
       title: hello

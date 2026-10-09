@@ -208,3 +208,15 @@ spec:
   system: platform-lab
   dependsOn:
     - component:platform-gateway
+---
+# Every golden-path app registers itself: Backstage expands this glob through its GitHub
+# integration, so apps/<name>/catalog-info.yaml shows up once merged to main.
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: platform-lab-apps
+  description: Catalog entries of every app under apps/
+spec:
+  type: url
+  targets:
+    - https://github.com/talesrc/platform-lab/blob/main/apps/*/catalog-info.yaml
