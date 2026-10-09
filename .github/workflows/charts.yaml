@@ -1,0 +1,62 @@
+name: Charts
+
+# Publishes charts/app (the golden-path chart apps depend on) to oci://ghcr.io/<owner>/charts.
+# A published version is immutable: changing the chart requires bumping Chart.yaml's version.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - charts/app/**
+      - .github/workflows/charts.yaml
+  pull_request:
+    paths:
+      - charts/app/**
+      - .github/workflows/charts.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: "v4.3.0"
+  REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+
+jobs:
+  publish:
+    name: Package${{ github.event_name != 'pull_request' && ' and publish' || '' }} charts/app
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io (not used on pull requests)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      - name: Lint
+        run: helm lint --strict charts/app --set image.repository=example,image.tag=1.0.0
+      - name: Package
+        id: package
+        run: |
+          version=$(helm show chart charts/app | awk '/^version:/ {print $2}')
+          helm package charts/app --destination dist
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+      - name: Log in to ghcr.io
+        if: github.event_name != 'pull_request'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Publish (skip if this version already exists)
+        if: github.event_name != 'pull_request'
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          if helm show chart "${REGISTRY}/app" --version "${VERSION}" >/dev/null 2>&1; then
+            echo "::notice::app ${VERSION} is already published; bump charts/app/Chart.yaml to release changes."
+            exit 0
+          fi
+          helm push "dist/app-${VERSION}.tgz" "${REGISTRY}"

@@ -1,0 +1,9 @@
+apiVersion: v2
+name: app
+description: >-
+  platform-lab golden-path chart for workloads: hardened Deployment, Service, HTTPRoute on the
+  gateway's https-apps listener, ServiceMonitor and PodDisruptionBudget. Apps depend on a pinned
+  version of it (apps/<name>/Chart.yaml) and only provide values.
+type: application
+version: 0.1.0
+home: https://github.com/talesrc/platform-lab/tree/main/charts/app

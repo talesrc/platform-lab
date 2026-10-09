@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "platform-lab app chart values",
+  "type": "object",
+  "required": ["image", "port"],
+  "properties": {
+    "nameOverride": { "type": "string", "pattern": "^([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)?$" },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": { "const": "latest" },
+          "description": "A pinned version; `latest` is rejected by the platform policies too."
+        },
+        "pullPolicy": { "enum": ["IfNotPresent", "Always", "Never"] }
+      }
+    },
+    "command": { "type": "array", "items": { "type": "string" } },
+    "args": { "type": "array", "items": { "type": "string" } },
+    "env": { "type": "object", "additionalProperties": { "type": "string" } },
+    "replicas": { "type": "integer", "minimum": 1 },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "service": {
+      "type": "object",
+      "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+    },
+    "probes": {
+      "type": "object",
+      "properties": {
+        "readiness": { "$ref": "#/definitions/probe" },
+        "liveness": { "$ref": "#/definitions/probe" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": { "type": "object", "required": ["cpu", "memory"] },
+        "limits": { "type": "object", "required": ["memory"] }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "runAsGroup": { "type": "integer", "minimum": 1 },
+        "fsGroup": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "writablePaths": { "type": "array", "items": { "type": "string", "pattern": "^/" } },
+    "route": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" }, "hostname": { "type": "string" } }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string", "pattern": "^/" },
+        "interval": { "type": "string" }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": { "minAvailable": { "type": "integer", "minimum": 1 } }
+    }
+  },
+  "definitions": {
+    "probe": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^/" },
+        "periodSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

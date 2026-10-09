@@ -62,6 +62,13 @@ resource "helm_release" "argocd" {
           url       = "docker.io/envoyproxy"
           enableOCI = "true"
         }
+        # The golden-path app chart (charts/app), a dependency of every apps/<name>/Chart.yaml.
+        platform-lab-charts = {
+          name      = "platform-lab-charts"
+          type      = "helm"
+          url       = "ghcr.io/talesrc/charts"
+          enableOCI = "true"
+        }
       }
       rbac = {
         # Authenticated users without a matching rule get no access (e.g. any GitHub user:

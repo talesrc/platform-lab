@@ -1,0 +1,64 @@
+# Defaults are the golden path; an app usually sets image, port and probes only.
+# Validated by values.schema.json (e.g. a pinned image tag is required, `latest` is rejected).
+
+# Resource names and the app.kubernetes.io/name label; defaults to the release name, which
+# Argo CD sets to the app directory name (apps/<name>).
+nameOverride: ""
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Overrides the image's ENTRYPOINT / CMD. Note: setting `args` replaces CMD, so images whose
+# binary is in CMD (no ENTRYPOINT) also need `command`.
+command: []
+args: []
+env: {}
+
+replicas: 1
+
+# Container port, named "http"; the Service exposes it on service.port.
+port: 8080
+service:
+  port: 80
+
+probes:
+  readiness:
+    path: /readyz
+    periodSeconds: 10
+  liveness:
+    path: /healthz
+    periodSeconds: 10
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+# Pod identity: non-root with a numeric UID so runAsNonRoot can be verified.
+securityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+# The root filesystem is read-only; each path here gets a writable emptyDir.
+writablePaths:
+  - /tmp
+
+# https://<name>.apps.lab.localhost on the platform gateway's https-apps listener.
+route:
+  enabled: true
+  hostname: ""
+
+# Prometheus scrapes service.port at this path (kube-prometheus-stack watches all namespaces).
+metrics:
+  enabled: true
+  path: /metrics
+  interval: 30s
+
+# Created only when replicas > 1 (a PDB on a single replica would block node drains).
+podDisruptionBudget:
+  minAvailable: 1
