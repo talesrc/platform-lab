@@ -1,0 +1,7 @@
+# upstreams = {
+#   "docker.io"       = "https://registry-1.docker.io"
+#   "quay.io"         = "https://quay.io"
+#   "registry.k8s.io" = "https://registry.k8s.io"
+#   "ghcr.io"         = "https://ghcr.io"
+# }
+# cache_ttl = "168h"

@@ -7,6 +7,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 
 | Path | Owner | What |
 |---|---|---|
+| `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
 | `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD and the root app-of-apps |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
@@ -28,7 +29,11 @@ Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.
 ## Bring it up
 
 ```bash
-cd terraform/kind-cluster
+cd terraform/registry-cache
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
+
+cd ../kind-cluster
 cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 
@@ -42,6 +47,15 @@ kubectl get applications -n argocd
 
 Argo CD: `terraform output argocd_url` (user `admin`, password from
 `terraform output -raw argocd_admin_password_command`).
+
+### Registry caches
+
+Every node's containerd pulls through `terraform/registry-cache`: one
+[Distribution](https://distribution.github.io/distribution/) registry in proxy mode per upstream,
+on the `kind` Docker network, with layers stored in Docker volumes. Images are downloaded from
+the internet once; cluster rebuilds pull them from the local cache. kind-cluster reads the
+mirror endpoints from the registry-cache state (`registry_cache_state_path`; set it to `null`
+to pull directly).
 
 `*.localhost` names (RFC 6761) resolve to `127.0.0.1` in browsers and curl, so no DNS or hosts-file changes are needed. Other tools use the OS resolver, which does not resolve them.
 
@@ -120,6 +134,8 @@ kyverno test gitops/manifests/kyverno-policies/tests
 ```bash
 terraform -chdir=terraform/platform-addons destroy
 terraform -chdir=terraform/kind-cluster destroy
+# Optional: also drop the image caches (the next build downloads everything again)
+terraform -chdir=terraform/registry-cache destroy
 ```
 
 ## CI

@@ -10,3 +10,6 @@ crash.log
 kubeconfig
 *.crt
 *.key
+
+# Generated containerd mirror config (terraform/kind-cluster)
+.containerd-certs.d/

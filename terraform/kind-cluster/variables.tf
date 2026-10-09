@@ -142,3 +142,9 @@ variable "kind_binary" {
   type        = string
   default     = "kind"
 }
+
+variable "registry_cache_state_path" {
+  description = "Path to the registry-cache Terraform state; its pull-through caches become containerd mirrors on every node. null = no caches (pull straight from the internet)."
+  type        = string
+  default     = "../registry-cache/terraform.tfstate"
+}
