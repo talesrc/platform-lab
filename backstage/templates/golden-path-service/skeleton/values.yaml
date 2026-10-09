@@ -1,0 +1,21 @@
+# Values for the golden-path chart (charts/app/values.yaml documents every option).
+# https://${{ values.name }}.apps.lab.localhost
+app:
+  image:
+    repository: ${{ values.image }}
+    tag: "${{ values.tag }}"
+  port: ${{ values.port }}
+  replicas: ${{ values.replicas }}
+  probes:
+    readiness:
+      path: ${{ values.readinessPath }}
+    liveness:
+      path: ${{ values.livenessPath }}
+  metrics:
+    path: ${{ values.metricsPath }}
+  resources:
+    requests:
+      cpu: ${{ values.cpuRequest }}
+      memory: ${{ values.memoryRequest }}
+    limits:
+      memory: ${{ values.memoryLimit }}

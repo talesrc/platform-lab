@@ -1,0 +1,11 @@
+# Deployed by the apps ApplicationSet into namespace app-${{ values.name }} (Argo CD renders
+# this chart). All manifests come from the platform's golden-path chart (charts/app); this app
+# only pins its version and sets values (values.yaml). Renovate proposes chart upgrades.
+apiVersion: v2
+name: ${{ values.name }}
+description: ${{ values.description }}
+version: 1.0.0
+dependencies:
+  - name: app
+    version: ${{ values.chartVersion }}
+    repository: oci://ghcr.io/talesrc/charts

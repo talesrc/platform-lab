@@ -87,13 +87,15 @@ spec:
 
   steps:
     - id: fetch
-      name: Render manifests
+      name: Render app (golden-path chart + values)
       action: fetch:template
       input:
         url: ./skeleton
         targetPath: apps/${{ parameters.name }}
         values:
           name: ${{ parameters.name }}
+          # Version of charts/app (oci://ghcr.io/talesrc/charts/app) new apps start on.
+          chartVersion: 0.1.0
           description: ${{ parameters.description }}
           owner: ${{ parameters.owner }}
           image: ${{ parameters.image }}
@@ -120,14 +122,6 @@ spec:
 
           Merging deploys it to namespace `app-${{ parameters.name }}` through the apps
           ApplicationSet, at https://${{ parameters.name }}.apps.lab.localhost.
-
-    # Registered before the PR is merged; the entity appears once the file is on main.
-    - id: register
-      name: Register in the catalog
-      action: catalog:register
-      input:
-        catalogInfoUrl: https://github.com/talesrc/platform-lab/blob/main/apps/${{ parameters.name }}/catalog-info.yaml
-        optional: true
 
   output:
     links:
