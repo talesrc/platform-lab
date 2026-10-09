@@ -26,6 +26,10 @@ spec:
       containers:
         - name: podinfo
           image: ghcr.io/stefanprodan/podinfo:6.15.0
+          # The image has no ENTRYPOINT (CMD is ["./podinfo"]), and `args` replaces CMD,
+          # so the binary must be set explicitly or the first flag is run as the command.
+          command:
+            - ./podinfo
           args:
             - --port=9898
             - --level=info
