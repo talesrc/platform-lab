@@ -1,6 +1,6 @@
 # Backstage developer portal: software catalog + golden-path templates.
-# The namespace (and the optional GitHub token Secret) is created by
-# terraform/platform-addons, so it exists before the gateway route is synced.
+# Image: ghcr.io/talesrc/platform-lab-backstage, built from backstage/app.
+# The namespace and the optional GitHub Secrets are created by terraform/platform-addons.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -19,20 +19,18 @@ spec:
     helm:
       valuesObject:
         backstage:
-          # Upstream demo image (`npx @backstage/create-app` build): catalog, scaffolder
-          # with the GitHub module, guest/GitHub auth, SQLite. No custom plugins.
+          # Our own image, built from backstage/app by .github/workflows/backstage-image.yaml.
+          # Pin a sha-<commit> tag; the lab config is baked in (app-config.production.yaml).
           image:
             registry: ghcr.io
-            repository: backstage/backstage
-            tag: "1.55.2"
-          # The chart only appends the generated app-config; keep the image's base file first.
-          # Not app-config.production.yaml: it sets backend.listen as a string while
-          # app-config.yaml uses an object, which Backstage rejects ("Invalid type in config
-          # for key 'backend.listen'"). The appConfig below overrides everything else it sets
-          # (PostgreSQL, URLs, guest auth, demo catalog).
+            repository: talesrc/platform-lab-backstage
+            tag: sha-38fba6e
+          # Same as the image's CMD; the chart appends its (empty) generated config last.
           args:
             - --config
             - app-config.yaml
+            - --config
+            - app-config.production.yaml
           podSecurityContext:
             runAsNonRoot: true
             runAsUser: 1000 # "node" in the image
@@ -50,47 +48,29 @@ spec:
               memory: 512Mi
             limits:
               memory: 1Gi
+          # Secrets created by terraform/platform-addons (never in git). All optional, so the
+          # pod starts without them: no token = read-only portal, no OAuth app = no sign-in.
           extraEnvVars:
-            # Created by terraform/platform-addons only when backstage_github_token is set.
-            # Without it the portal runs read-only (anonymous, rate-limited GitHub access).
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: backstage-github
                   key: GITHUB_TOKEN
                   optional: true
-          appConfig:
-            app:
-              title: platform-lab
-              baseUrl: https://backstage.lab.localhost
-            organization:
-              name: platform-lab
-            backend:
-              baseUrl: https://backstage.lab.localhost
-              cors:
-                origin: https://backstage.lab.localhost
-              # The image defaults to PostgreSQL in production; the lab uses in-memory
-              # SQLite, so the catalog is rebuilt from git on every restart.
-              database:
-                client: better-sqlite3
-                connection: ":memory:"
-            auth:
-              providers:
-                guest:
-                  # The image runs with NODE_ENV=production, where guest login is off by default.
-                  dangerouslyAllowOutsideDevelopment: true
-                  userEntityRef: user:default/talesrc
-            catalog:
-              # Be gentle with GitHub's anonymous rate limit (60 requests/hour).
-              processingInterval:
-                minutes: 10
-              rules:
-                - allow: [Component, System, API, Resource, Location, Domain, Group, User, Template]
-              locations:
-                - type: url
-                  target: https://github.com/talesrc/platform-lab/blob/main/catalog-info.yaml
-                - type: url
-                  target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
+            - name: AUTH_GITHUB_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-github-oauth
+                  key: AUTH_GITHUB_CLIENT_ID
+                  optional: true
+            - name: AUTH_GITHUB_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-github-oauth
+                  key: AUTH_GITHUB_CLIENT_SECRET
+                  optional: true
+          # The configuration lives in the image (backstage/app/app-config.production.yaml).
+          appConfig: {}
   destination:
     server: https://kubernetes.default.svc
     namespace: backstage
