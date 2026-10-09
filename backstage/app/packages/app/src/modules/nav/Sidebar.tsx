@@ -10,6 +10,8 @@ import { NavContentBlueprint } from '@backstage/plugin-app-react';
 import { SidebarLogo } from './SidebarLogo';
 import MenuIcon from '@material-ui/icons/Menu';
 import SearchIcon from '@material-ui/icons/Search';
+import SyncIcon from '@material-ui/icons/Sync';
+import ShowChartIcon from '@material-ui/icons/ShowChart';
 import { SidebarSearchModal } from '@backstage/plugin-search';
 import { UserSettingsSignInAvatar } from '@backstage/plugin-user-settings';
 import { NotificationsSidebarItem } from '@backstage/plugin-notifications';
@@ -41,6 +43,18 @@ export const SidebarContent = NavContentBlueprint.make({
               {nav.rest({ sortBy: 'title' })}
             </SidebarScrollWrapper>
           </SidebarGroup>
+          <SidebarDivider />
+          {/* Platform UIs on the shared gateway (see the root catalog-info.yaml). */}
+          <SidebarItem
+            icon={SyncIcon}
+            to="https://argocd.lab.localhost"
+            text="Argo CD"
+          />
+          <SidebarItem
+            icon={ShowChartIcon}
+            to="https://grafana.lab.localhost"
+            text="Grafana"
+          />
           <SidebarSpace />
           <SidebarDivider />
           <NotificationsSidebarItem />
