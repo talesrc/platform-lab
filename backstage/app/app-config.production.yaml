@@ -1,0 +1,53 @@
+# platform-lab production config, baked into the image. Secrets come from env vars
+# (Kubernetes Secrets created by terraform/platform-addons); nothing secret lives here.
+app:
+  title: platform-lab
+  baseUrl: https://backstage.lab.localhost
+
+organization:
+  name: platform-lab
+
+backend:
+  baseUrl: https://backstage.lab.localhost
+  # Object form, like app-config.yaml: mixing it with the ':7007' string form fails at
+  # startup ("Invalid type in config for key 'backend.listen'").
+  listen:
+    port: 7007
+  cors:
+    origin: https://backstage.lab.localhost
+  # Lab: in-memory SQLite, no database to run; the catalog is rebuilt from git on restart.
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+integrations:
+  github:
+    - host: github.com
+      # Fine-grained PAT (Contents + Pull requests on platform-lab); optional.
+      token: ${GITHUB_TOKEN}
+
+auth:
+  environment: production
+  providers:
+    # OAuth App callback: https://backstage.lab.localhost/api/auth/github/handler/frame
+    github:
+      production:
+        clientId: ${AUTH_GITHUB_CLIENT_ID}
+        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
+        signIn:
+          resolvers:
+            # GitHub login `talesrc` -> catalog User `user:default/talesrc` (catalog-info.yaml).
+            # Users without a matching User entity cannot sign in.
+            - resolver: usernameMatchingUserEntityName
+
+catalog:
+  # Be gentle with GitHub's API rate limit.
+  processingInterval:
+    minutes: 10
+  rules:
+    - allow: [Component, System, API, Resource, Location, Domain, Group, User, Template]
+  locations:
+    - type: url
+      target: https://github.com/talesrc/platform-lab/blob/main/catalog-info.yaml
+    - type: url
+      target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
