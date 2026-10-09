@@ -1,15 +1,20 @@
 {
-  "short_name": "Backstage",
-  "name": "Backstage",
+  "short_name": "TALECOs",
+  "name": "TALECOs platform-lab",
   "icons": [
     {
       "src": "favicon.ico",
-      "sizes": "48x48",
+      "sizes": "16x16 32x32 48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "android-chrome-192x192.png",
+      "sizes": "192x192",
       "type": "image/png"
     }
   ],
   "start_url": "./index.html",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#0a0f19",
+  "background_color": "#0e1420"
 }
