@@ -148,3 +148,14 @@ variable "registry_cache_state_path" {
   type        = string
   default     = "../registry-cache/terraform.tfstate"
 }
+
+variable "max_parallel_image_pulls" {
+  description = "Image pulls the kubelet runs at once per node. 1 = serial (kubelet default), so one slow pull blocks every other pod on that node."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.max_parallel_image_pulls >= 1
+    error_message = "max_parallel_image_pulls must be at least 1."
+  }
+}

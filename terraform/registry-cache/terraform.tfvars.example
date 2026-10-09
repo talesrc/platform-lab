@@ -3,5 +3,9 @@
 #   "quay.io"         = "https://quay.io"
 #   "registry.k8s.io" = "https://registry.k8s.io"
 #   "ghcr.io"         = "https://ghcr.io"
+#   "ecr-public.aws.com" = "https://ecr-public.aws.com"
 # }
 # cache_ttl = "168h"
+# aliases = {
+#   "reg.kyverno.io" = "ghcr.io"
+# }

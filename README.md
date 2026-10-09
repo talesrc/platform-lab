@@ -7,7 +7,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 
 | Path | Owner | What |
 |---|---|---|
-| `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
+| `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io, ecr-public.aws.com; reg.kyverno.io via ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
 | `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD and the root app-of-apps |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
@@ -55,7 +55,15 @@ Every node's containerd pulls through `terraform/registry-cache`: one
 on the `kind` Docker network, with layers stored in Docker volumes. Images are downloaded from
 the internet once; cluster rebuilds pull them from the local cache. kind-cluster reads the
 mirror endpoints from the registry-cache state (`registry_cache_state_path`; set it to `null`
-to pull directly).
+to pull directly). If a cache is down, containerd falls back to the upstream registry.
+
+Registries that front another one are cached through it with `aliases`: `reg.kyverno.io`
+serves `ghcr.io/kyverno/*` and delegates auth to ghcr.io, which a Distribution proxy can't
+follow, so it uses the ghcr.io cache. When a new image comes from another registry, add it
+to `upstreams` (or `aliases`) — `kubectl get events -A | grep Pulled` shows where images come from.
+
+The kubelet pulls up to `max_parallel_image_pulls` (default 5) images at once per node, so a
+slow pull doesn't block the others.
 
 `*.localhost` names (RFC 6761) resolve to `127.0.0.1` in browsers and curl, so no DNS or hosts-file changes are needed. Other tools use the OS resolver, which does not resolve them.
 

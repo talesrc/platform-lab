@@ -31,6 +31,23 @@ variable "upstreams" {
     "quay.io"         = "https://quay.io"
     "registry.k8s.io" = "https://registry.k8s.io"
     "ghcr.io"         = "https://ghcr.io"
+    # Amazon ECR Public (e.g. the Redis image Argo CD uses).
+    "ecr-public.aws.com" = "https://ecr-public.aws.com"
+  }
+}
+
+variable "aliases" {
+  description = "Registry hosts served by another host's cache (alias => upstreams key), for registries that front another one."
+  type        = map(string)
+  default = {
+    # reg.kyverno.io/kyverno/* is ghcr.io/kyverno/* (it delegates auth to ghcr.io,
+    # which a Distribution proxy can't follow), so reuse the ghcr.io cache.
+    "reg.kyverno.io" = "ghcr.io"
+  }
+
+  validation {
+    condition     = alltrue([for target in values(var.aliases) : contains(keys(var.upstreams), target)])
+    error_message = "Every alias must point to a key of upstreams."
   }
 }
 

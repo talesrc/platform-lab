@@ -69,6 +69,19 @@ locals {
       }
       nodes = concat(local.control_plane_nodes, local.worker_nodes)
     },
+    {
+      # Applied to every node's kubelet.
+      kubeadmConfigPatches = [yamlencode(merge(
+        {
+          apiVersion = "kubelet.config.k8s.io/v1beta1"
+          kind       = "KubeletConfiguration"
+        },
+        var.max_parallel_image_pulls > 1 ? {
+          serializeImagePulls   = false
+          maxParallelImagePulls = var.max_parallel_image_pulls
+        } : { serializeImagePulls = true, maxParallelImagePulls = 1 },
+      ))]
+    },
     concat(
       [for gates in [var.feature_gates] : { featureGates = gates } if length(gates) > 0],
       # Make containerd read per-registry mirror config from /etc/containerd/certs.d.
