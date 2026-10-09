@@ -1,0 +1,35 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  gatewayClassName: {{ .Values.gatewayClass.name }}
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: {{ .Values.gateway.name }}-proxy
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: {{ .Values.gateway.http.port }}
+      allowedRoutes:
+        namespaces:
+          from: {{ .Values.gateway.allowedRoute }}
+    {{- with .Values.gateway.https }}
+    {{- if .enabled }}
+    - name: https
+      protocol: HTTPS
+      port: {{ .port }}
+      hostname: {{ .hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .certificate.secretName }}
+      allowedRoutes:
+        namespaces:
+          from: {{ $.Values.gateway.allowedRoute }}
+    {{- end }}
+    {{- end }}

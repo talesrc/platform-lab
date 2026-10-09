@@ -1,0 +1,36 @@
+gatewayClass:
+  name: envoy
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+
+gateway:
+  name: platform
+  # Namespaces allowed to attach HTTPRoutes: All | Same
+  allowedRoute: All
+  # nodePorts must match the kind extraPortMappings (terraform/kind-cluster: ingress_node_ports).
+  http:
+    port: 80
+    nodePort: 30080
+  https:
+    enabled: true
+    port: 443
+    nodePort: 30443
+    hostname: "*.localtest.me"
+    # Wildcard certificate issued by cert-manager (see gitops/manifests/cert-manager-issuers).
+    certificate:
+      secretName: platform-gateway-tls
+      issuerRef:
+        kind: ClusterIssuer
+        name: platform-ca
+      dnsNames:
+        - "*.localtest.me"
+  # Redirect every plain-HTTP request to HTTPS (only when https.enabled).
+  redirectHttpToHttps: true
+
+# Services exposed through the gateway. Routes attach to the https listener
+# when it is enabled, otherwise to http.
+# - name: argocd
+#   namespace: argocd
+#   hostname: argocd.localtest.me
+#   service: argocd-server
+#   port: 80
+routes: []

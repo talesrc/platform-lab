@@ -1,0 +1,25 @@
+# Exposes the Envoy data plane as a NodePort Service with fixed ports, so the
+# kind extraPortMappings (host :80/:443 -> node :nodePort) reach it.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {{ .Values.gateway.name }}-proxy
+  namespace: {{ .Release.Namespace }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        externalTrafficPolicy: Cluster
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: {{ .Values.gateway.http.port }}
+                  nodePort: {{ .Values.gateway.http.nodePort }}
+                {{- if .Values.gateway.https.enabled }}
+                - port: {{ .Values.gateway.https.port }}
+                  nodePort: {{ .Values.gateway.https.nodePort }}
+                {{- end }}

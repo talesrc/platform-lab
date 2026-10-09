@@ -1,0 +1,29 @@
+cluster_name        = "platform-lab"
+kubernetes_version  = "v1.37.0"
+node_image_digest   = "sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5" # from the kind v0.33.0 release notes
+control_plane_count = 1
+worker_count        = 2
+
+worker_labels = {
+  "workload" = "general"
+}
+
+ingress_ready = true
+ingress_node_ports = {
+  http  = 30080
+  https = 30443
+}
+ingress_host_ports = {
+  http  = 80
+  https = 443
+}
+
+networking = {
+  api_server_port = 6443
+  pod_subnet      = "10.244.0.0/16"
+  service_subnet  = "10.96.0.0/12"
+  # disable_default_cni = true   # set when installing Cilium/Calico yourself
+  # kube_proxy_mode     = "none" # e.g. Cilium kube-proxy replacement
+}
+
+# kubeconfig_path = "./kubeconfig" # default: <module dir>/kubeconfig

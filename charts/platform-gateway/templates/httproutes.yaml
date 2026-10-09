@@ -1,0 +1,38 @@
+{{- $listener := ternary "https" "http" .Values.gateway.https.enabled }}
+{{- if and .Values.gateway.https.enabled .Values.gateway.redirectHttpToHttps }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.gateway.name }}-https-redirect
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}
+{{- range .Values.routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+spec:
+  parentRefs:
+    - name: {{ $.Values.gateway.name }}
+      namespace: {{ $.Release.Namespace }}
+      sectionName: {{ $listener }}
+  hostnames:
+    - {{ .hostname | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ .service }}
+          port: {{ .port }}
+{{- end }}
