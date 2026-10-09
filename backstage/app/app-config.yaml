@@ -6,6 +6,9 @@ app:
   packages: all
 
   extensions:
+    # Midnight (packages/app/src/modules/theme) is the only theme: no light variant.
+    - theme:app/light: false
+
     # Default landing page configuration.
     # The catalog is mounted at /catalog by default but is overridden here to
     # serve as the root page. To switch to the Home page, comment out the

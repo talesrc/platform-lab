@@ -1,0 +1,41 @@
+/*
+ * Midnight for Backstage UI (@backstage/ui) components, which read --bui-* variables
+ * instead of the Material UI theme. Mirrors the palette in midnight.ts.
+ * Unlayered, so it wins over the @layer tokens in @backstage/ui/css/styles.css.
+ */
+[data-theme-mode='dark'][data-theme-name='midnight'] {
+  --bui-ring: #2dd4bf;
+  --bui-scrollbar: #0e14203a;
+  --bui-scrollbar-thumb: #2a3550;
+
+  --bui-bg-app: #0e1420;
+  --bui-bg-neutral-1: #161e2e;
+  --bui-bg-neutral-2: #1e2840;
+  --bui-bg-neutral-3: #263250;
+  --bui-bg-neutral-4: #2e3b5c;
+
+  --bui-fg-primary: #e6edf6;
+  --bui-fg-secondary: #93a1b8;
+  --bui-fg-disabled: #64718a;
+  --bui-fg-positive: #34d399;
+  --bui-fg-negative: #f87171;
+  --bui-fg-warning: #fbbf24;
+  --bui-fg-announcement: #60a5fa;
+
+  --bui-border-1: #2a3550;
+  --bui-border-2: #374466;
+
+  --bui-accent-bg: #2dd4bf;
+  --bui-accent-bg-hover: #5eead4;
+  --bui-accent-bg-disabled: #134e4a;
+  --bui-accent-fg: #04201c;
+  --bui-accent-fg-disabled: #5b8f88;
+
+  /* Deprecated aliases still used by some components */
+  --bui-bg-solid: #2dd4bf;
+  --bui-bg-solid-hover: #5eead4;
+  --bui-bg-solid-pressed: #5eead4;
+  --bui-bg-solid-disabled: #134e4a;
+  --bui-fg-solid: #04201c;
+  --bui-fg-solid-disabled: #5b8f88;
+}

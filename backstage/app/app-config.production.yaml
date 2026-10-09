@@ -51,3 +51,48 @@ catalog:
       target: https://github.com/talesrc/platform-lab/blob/main/catalog-info.yaml
     - type: url
       target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
+
+# --- Platform visibility (IDP phase 1) --------------------------------------------------
+# Tokens come from the backstage-platform-access Secret (terraform/platform-access); all
+# traffic stays in-cluster.
+
+# Pods, deployments, restarts, errors and logs per entity, via the pod's service account
+# (read-only ClusterRole in gitops/platform/backstage.yaml). Entities select their objects
+# with backstage.io/kubernetes-label-selector (+ backstage.io/kubernetes-namespace).
+kubernetes:
+  serviceLocatorMethod:
+    type: multiTenant
+  clusterLocatorMethods:
+    - type: config
+      clusters:
+        - name: platform-lab
+          url: https://kubernetes.default.svc
+          authProvider: serviceAccount
+          caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+# Argo CD sync status, health and history per entity (annotation argocd/app-name).
+argocd:
+  baseUrl: https://argocd.lab.localhost
+  appLocatorMethods:
+    - type: config
+      instances:
+        - name: platform-lab
+          url: http://argocd-server.argocd.svc
+          token: ${ARGOCD_AUTH_TOKEN}
+
+# Grafana dashboards and alerts per entity (annotations grafana/dashboard-selector,
+# grafana/alert-label-selector). The browser calls Backstage's proxy; the Viewer token is
+# added server-side and never reaches the browser.
+proxy:
+  endpoints:
+    /grafana/api:
+      target: http://kube-prometheus-stack-grafana.monitoring.svc
+      headers:
+        Authorization: Bearer ${GRAFANA_TOKEN}
+
+grafana:
+  hosts:
+    - id: platform-lab
+      domain: https://grafana.lab.localhost
+      proxyPath: /grafana/api
+      unifiedAlerting: true

@@ -10,6 +10,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 | `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io, ecr-public.aws.com; reg.kyverno.io via ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
 | `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD, the root app-of-apps, the `backstage` namespace and its optional GitHub token |
+| `terraform/platform-access` | Terraform | Day-1 access for Backstage's plugins: read-only Argo CD token and Grafana Viewer token, stored in the `backstage` namespace (runs after platform-addons) |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
 | `apps` | Argo CD (ApplicationSet) | Workloads on the golden path, one directory per app (see [Apps](#apps)) |
@@ -48,6 +49,11 @@ cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 
 cd ../platform-addons
+cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
+
+# After Argo CD has synced (Grafana must be up): tokens for Backstage's plugins
+cd ../platform-access
 cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 
@@ -255,6 +261,21 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
 
    Terraform stores it as the `backstage-github-oauth` Secret (`AUTH_GITHUB_CLIENT_ID`,
    `AUTH_GITHUB_CLIENT_SECRET`). Without it nobody can sign in.
+
+**Entity pages** show each component's live state, selected by annotations in its
+`catalog-info.yaml` (the golden-path template adds them to new services):
+
+| Tab/card | Source | Annotation | Access |
+|---|---|---|---|
+| Kubernetes | pods, deployments, restarts, errors, logs | `backstage.io/kubernetes-label-selector` (+ `-namespace`) | pod service account, read-only ClusterRole (no Secrets) |
+| Argo CD | sync status, health, history | `argocd/app-name` | `backstage` Argo CD account, `role:readonly` (API tokens only) |
+| Grafana | dashboards | `grafana/dashboard-selector` | Viewer service account, via Backstage's proxy (token never reaches the browser) |
+
+The Argo CD and Grafana tokens come from `terraform/platform-access`. It reaches Argo CD with
+the provider's own port-forward, and Grafana with a short-lived `kubectl port-forward`
+(`port-forward.sh`): Terraform is a Go program, and Go doesn't resolve `*.localhost` names the
+way browsers and curl do. Grafana's alerts card only lists Grafana-managed alerts; the lab's
+alerts are Prometheus rules, so use the Alertmanager link.
 
 **Changing the portal:** edit `backstage/app/`, push; CI builds and pushes a new `sha-` image;
 bump the tag in `gitops/platform/backstage.yaml`. The image is a multi-stage build from source

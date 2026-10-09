@@ -56,8 +56,11 @@ backend.add(import('@backstage/plugin-search-backend-module-pg'));
 backend.add(import('@backstage/plugin-search-backend-module-catalog'));
 backend.add(import('@backstage/plugin-search-backend-module-techdocs'));
 
-// kubernetes plugin
+// kubernetes plugin (in-cluster service account; see app-config.production.yaml)
 backend.add(import('@backstage/plugin-kubernetes-backend'));
+
+// Argo CD sync/health per entity (Roadie); read-only token from terraform/platform-access
+backend.add(import('@roadiehq/backstage-plugin-argo-cd-backend'));
 
 // user settings plugin
 backend.add(import('@backstage/plugin-user-settings-backend'));
