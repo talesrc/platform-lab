@@ -23,7 +23,29 @@ gateway:
         name: platform-ca
       dnsNames:
         - "*.lab.localhost"
-  # Redirect every plain-HTTP request to HTTPS (only when https.enabled).
+  # Second HTTPS listener for workloads (apps/<name> -> <name>.apps.lab.localhost).
+  # Shares the https port; needs https.enabled. A separate certificate is needed
+  # because a wildcard only covers one label (*.lab.localhost != x.apps.lab.localhost).
+  appsListener:
+    enabled: true
+    # HTTPRoutes of apps attach with parentRefs[].sectionName = this name.
+    name: https-apps
+    hostname: "*.apps.lab.localhost"
+    # Which namespaces may attach routes. Gateway API can't match a name prefix
+    # (app-*), so selecting app namespaces needs a label on them, e.g.
+    #   namespaces: {from: Selector, selector: {matchLabels: {platform-lab/tenant: apps}}}
+    allowedRoutes:
+      namespaces:
+        from: All
+    certificate:
+      secretName: platform-gateway-apps-tls
+      issuerRef:
+        kind: ClusterIssuer
+        name: platform-ca
+      dnsNames:
+        - "*.apps.lab.localhost"
+  # Redirect every plain-HTTP request (platform and apps hosts) to HTTPS
+  # (only when https.enabled).
   redirectHttpToHttps: true
 
 # Services exposed through the gateway. Routes attach to the https listener

@@ -31,5 +31,20 @@ spec:
       allowedRoutes:
         namespaces:
           from: {{ $.Values.gateway.allowedRoute }}
+    {{- with $.Values.gateway.appsListener }}
+    {{- if .enabled }}
+    - name: {{ .name }}
+      protocol: HTTPS
+      port: {{ $.Values.gateway.https.port }}
+      hostname: {{ .hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .certificate.secretName }}
+      allowedRoutes:
+        {{- toYaml .allowedRoutes | nindent 8 }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- end }}

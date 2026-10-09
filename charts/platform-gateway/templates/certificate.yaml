@@ -18,3 +18,24 @@ spec:
     size: 256
 {{- end }}
 {{- end }}
+{{- if and .Values.gateway.https.enabled .Values.gateway.appsListener.enabled }}
+{{- with .Values.gateway.appsListener }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $.Values.gateway.name }}-apps-tls
+  namespace: {{ $.Release.Namespace }}
+spec:
+  secretName: {{ .certificate.secretName }}
+  issuerRef:
+    group: cert-manager.io
+    kind: {{ .certificate.issuerRef.kind }}
+    name: {{ .certificate.issuerRef.name }}
+  dnsNames:
+    {{- toYaml .certificate.dnsNames | nindent 4 }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+{{- end }}
+{{- end }}
