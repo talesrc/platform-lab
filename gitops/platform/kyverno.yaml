@@ -18,6 +18,11 @@ spec:
       # The chart's Helm test pods would otherwise run as regular workloads.
       skipTests: true
       valuesObject:
+        kyverno-api:
+          # The CRD templates render `labels: {}` by default; the API server drops
+          # empty maps, so Argo CD would report those CRDs as OutOfSync forever.
+          labels:
+            app.kubernetes.io/part-of: kyverno
         config:
           # Webhooks never see kube-system; the chart appends the kyverno
           # namespace itself (config.excludeKyvernoNamespace: true).
