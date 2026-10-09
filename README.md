@@ -130,6 +130,7 @@ GitHub Actions (`.github/workflows/`) runs on every pull request and push to `ma
 |---|---|
 | Terraform | `terraform fmt -check`, `init -backend=false` + `validate` for every module in `terraform/` |
 | Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
+| Kyverno policy tests | `kyverno test gitops/`: every policy against the good/bad sample resources in `tests/` dirs |
 | Conventional Commits | commitlint on the PR's commits (`commitlint.config.mjs`); the PR title is checked too, since squash merges use it |
 | Workflow lint | actionlint on the workflows |
 

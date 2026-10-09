@@ -20,7 +20,8 @@ python3 "$ROOT/scripts/ci/render-charts.py" "$OUT/rendered"
 echo "::endgroup::"
 
 # Only YAML files that are Kubernetes objects (skip e.g. Helm values files).
-mapfile -t manifests < <(grep -rlE --include='*.yaml' --include='*.yml' '^kind:' "$ROOT/gitops" || true)
+# tests/ dirs hold Kyverno CLI test suites (kind: Test), run by `kyverno test` instead.
+mapfile -t manifests < <(grep -rlE --include='*.yaml' --include='*.yml' --exclude-dir=tests '^kind:' "$ROOT/gitops" || true)
 
 echo "::group::kubeconform"
 kubeconform \

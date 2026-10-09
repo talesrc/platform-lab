@@ -19,6 +19,8 @@ env:
   HELM_VERSION: "v4.3.0"
   # renovate: datasource=github-releases depName=yannh/kubeconform
   KUBECONFORM_VERSION: "v0.8.0"
+  # renovate: datasource=github-releases depName=kyverno/kyverno
+  KYVERNO_VERSION: "v1.19.1"
   # renovate: datasource=github-releases depName=rhysd/actionlint
   ACTIONLINT_VERSION: "1.7.12"
   # renovate: datasource=npm depName=@commitlint/cli
@@ -71,6 +73,24 @@ jobs:
           echo "${RUNNER_TEMP}/venv/bin" >> "${GITHUB_PATH}"
       - name: Lint charts, render them and validate all manifests
         run: scripts/ci/validate-manifests.sh
+
+  policies:
+    name: Kyverno policy tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kyverno CLI
+        run: |
+          base="https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}"
+          archive="kyverno-cli_${KYVERNO_VERSION}_linux_x86_64.tar.gz"
+          cd "${RUNNER_TEMP}"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLo checksums.txt "${base}/checksums.txt"
+          grep " ${archive}$" checksums.txt | sha256sum -c
+          tar xzf "${archive}" kyverno
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+      - name: kyverno test (every kyverno-test.yaml under gitops/)
+        run: kyverno test gitops/
 
   commitlint:
     name: Conventional Commits
