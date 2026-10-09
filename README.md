@@ -17,7 +17,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 Sync waves under `gitops/platform`:
 
 1. `cert-manager` and `envoy-gateway` (wave -2)
-2. `cert-manager-issuers` (wave -1): self-signed root → `platform-ca` ClusterIssuer
+2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
 
 ## Requirements
@@ -50,6 +50,29 @@ The gateway certificate is signed by a local CA. Export it with
 `eval "$(terraform output -raw ca_certificate_command)"` and either pass it to curl
 (`curl --cacert platform-ca.crt https://argocd.lab.localhost`) or import it into your
 OS/browser trust store (Windows: `certutil -user -addstore Root platform-ca.crt`).
+
+## Observability
+
+[kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
+(Prometheus Operator, Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics)
+runs in `monitoring`, plus `metrics-server` for `kubectl top`. No persistent volumes;
+Prometheus keeps 2 days of data.
+
+| UI | URL |
+|---|---|
+| Grafana | https://grafana.lab.localhost |
+| Prometheus | https://prometheus.lab.localhost |
+| Alertmanager | https://alertmanager.lab.localhost |
+
+Grafana user is `admin`; the password is generated in-cluster (never stored in git):
+
+```bash
+kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+Prometheus selects ServiceMonitors, PodMonitors, Probes and PrometheusRules from every
+namespace. etcd, kube-scheduler, kube-controller-manager and kube-proxy are not scraped:
+kind binds their metrics to `127.0.0.1` inside the nodes.
 
 ## Tear it down
 

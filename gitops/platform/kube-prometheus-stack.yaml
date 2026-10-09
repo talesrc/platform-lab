@@ -1,0 +1,161 @@
+# Prometheus Operator, Prometheus, Alertmanager, Grafana, node-exporter and
+# kube-state-metrics. Lab sizing: no persistent volumes, short retention.
+# Wave -1 so that (a) apps shipping ServiceMonitor/PodMonitor/PrometheusRule
+# objects can use these CRDs from wave 0 on, and (b) the `monitoring` namespace
+# exists before platform-gateway (wave 0) creates its HTTPRoutes there.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.2.0
+    helm:
+      valuesObject:
+        # kind binds etcd, kube-scheduler, kube-controller-manager and kube-proxy
+        # metrics to 127.0.0.1 inside the nodes, so Prometheus can't scrape them:
+        # disable their monitors and rules instead of keeping targets down forever.
+        kubeEtcd:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        defaultRules:
+          rules:
+            etcd: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeControllerManager: false
+            kubeProxy: false
+            windows: false
+
+        prometheusOperator:
+          admissionWebhooks:
+            # Use the cluster's cert-manager instead of the chart's certgen/patch
+            # jobs (Helm hooks that fight with Argo CD).
+            certManager:
+              enabled: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+
+        prometheus:
+          prometheusSpec:
+            externalUrl: https://prometheus.lab.localhost
+            retention: 2d
+            retentionSize: 2GB
+            # Pick up ServiceMonitors/PodMonitors/Probes/Rules from every
+            # namespace, not only the ones labelled for this Helm release.
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            probeSelectorNilUsesHelmValues: false
+            scrapeConfigSelectorNilUsesHelmValues: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+
+        alertmanager:
+          alertmanagerSpec:
+            externalUrl: https://alertmanager.lab.localhost
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 128Mi
+
+        grafana:
+          # No adminPassword: the chart generates a random one into the
+          # kube-prometheus-stack-grafana Secret (see ignoreDifferences below).
+          grafana.ini:
+            server:
+              root_url: https://grafana.lab.localhost
+          # `helm test` pod; Argo CD doesn't run Helm test hooks.
+          testFramework:
+            enabled: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+
+        prometheus-node-exporter:
+          # The host root filesystem mount fails inside kind nodes
+          # (mount propagation is not shared).
+          hostRootFsMount:
+            enabled: false
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # The Grafana chart generates a random admin password on every render (its
+  # Helm `lookup` doesn't work under Argo CD). Keep the first generated value
+  # instead of rotating it, and the pod checksum derived from it.
+  ignoreDifferences:
+    - kind: Secret
+      name: kube-prometheus-stack-grafana
+      namespace: monitoring
+      jsonPointers:
+        - /data/admin-password
+    - group: apps
+      kind: Deployment
+      name: kube-prometheus-stack-grafana
+      namespace: monitoring
+      jsonPointers:
+        - /spec/template/metadata/annotations/checksum~1secret
+    # caBundle is injected by cert-manager's cainjector.
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus Operator CRDs exceed the client-side apply annotation limit.
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
