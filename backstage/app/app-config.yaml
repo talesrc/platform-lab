@@ -78,7 +78,7 @@ app:
     - home-page-widget:home/random-joke: false
 
 organization:
-  name: TALECOs
+  name: TALECO
 
 backend:
   # Used for enabling authentication, secret is shared by all backend plugins
@@ -186,5 +186,5 @@ permission:
 
 # see https://backstage.io/docs/ai/mcp-actions for more details
 mcpActions:
-  name: 'TALECOs platform-lab' # defaults to "backstage"
+  name: 'TALECO platform-lab' # defaults to "backstage"
   description: 'Tools for managing your software catalog, creating new services from templates, and exploring your developer portal' # optional

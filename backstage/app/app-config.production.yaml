@@ -6,7 +6,7 @@ app:
   baseUrl: https://backstage.lab.localhost
 
 organization:
-  name: TALECOs
+  name: TALECO
 
 backend:
   baseUrl: https://backstage.lab.localhost

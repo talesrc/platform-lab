@@ -4,7 +4,7 @@ import { LinkButton, MarkdownContent } from '@backstage/core-components';
 import Box from '@material-ui/core/Box';
 
 const content = `
-**platform-lab** is TALECOs' internal developer platform. Every service here is
+**platform-lab** is TALECO's internal developer platform. Every service here is
 described in the [catalog](/catalog) and deployed from git by Argo CD.
 
 ### Ship a service in three steps
