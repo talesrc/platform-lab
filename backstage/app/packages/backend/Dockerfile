@@ -15,7 +15,10 @@
 # Alternatively, there is also a multi-stage Dockerfile documented here:
 # https://backstage.io/docs/deployment/docker#multi-stage-build
 
-FROM node:24-trixie-slim
+# Official Node image via Amazon ECR Public's mirror of Docker official images: same
+# digest as docker.io/library/node, without Docker Hub's auth service and rate limits
+# (a 504 from auth.docker.io failed the first CI build).
+FROM public.ecr.aws/docker/library/node:24-trixie-slim
 
 # Install sqlite3 dependencies. You can skip this if you don't use sqlite3 in the image,
 # in which case you should also move better-sqlite3 to "devDependencies" in package.json.
