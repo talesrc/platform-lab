@@ -1,7 +1,9 @@
 # cluster_state_path = "../kind-cluster/terraform.tfstate"
 
 argocd = {
-  chart_version      = "10.10.2"
+  # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
+  chart_version = "10.10.2"
+  # renovate: datasource=helm depName=argocd-apps registryUrl=https://argoproj.github.io/argo-helm
   apps_chart_version = "2.0.6"
   hostname           = "argocd.lab.localhost"
 }

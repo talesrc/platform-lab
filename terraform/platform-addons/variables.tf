@@ -7,7 +7,9 @@ variable "cluster_state_path" {
 variable "argocd" {
   description = "Argo CD release settings."
   type = object({
-    chart_version      = optional(string, "10.10.2")
+    # renovate: datasource=helm depName=argo-cd registryUrl=https://argoproj.github.io/argo-helm
+    chart_version = optional(string, "10.10.2")
+    # renovate: datasource=helm depName=argocd-apps registryUrl=https://argoproj.github.io/argo-helm
     apps_chart_version = optional(string, "2.0.6") # argocd-apps chart (root Application)
     namespace          = optional(string, "argocd")
     hostname           = optional(string, "argocd.lab.localhost") # *.localhost resolves to 127.0.0.1 in browsers/curl

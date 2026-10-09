@@ -1,0 +1,62 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "labels": ["dependencies"],
+  "argocd": {
+    "managerFilePatterns": ["/^gitops/.+\\.ya?ml$/"]
+  },
+  "customManagers": [
+    {
+      "description": "Versions marked with '# renovate:' comments in Terraform files (helm chart defaults, kindest/node tag + optional digest on the next line)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^terraform/.+\\.tf$/", "/^terraform/.+\\.tfvars\\.example$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n[^\\n\"]*\"(?<currentValue>[^\"]+)\"[^\\n]*(?:\\n\\s*node_image_digest\\s*=\\s*\"(?<currentDigest>sha256:[a-f0-9]{64})\")?"
+      ]
+    },
+    {
+      "description": "Tool versions in GitHub Actions workflow env vars marked with '# renovate:' comments",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*[A-Z_]+:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Argo CD and its root-app chart are upgraded together",
+      "matchPackageNames": ["argo-cd", "argocd-apps"],
+      "groupName": "argo-cd"
+    },
+    {
+      "description": "Keep both commitlint packages in lockstep (the workflow installs config-conventional at the CLI's version)",
+      "matchPackageNames": ["@commitlint/cli"],
+      "groupName": "commitlint"
+    },
+    {
+      "description": "Group non-major GitHub Actions and CI tool updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pinDigest"],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "New kindest/node images may need a newer kind CLI; check the kind release notes before merging",
+      "matchPackageNames": ["kindest/node"],
+      "prBodyNotes": ["⚠️ kind node images are built for a specific kind CLI release. Check https://github.com/kubernetes-sigs/kind/releases and upgrade the local kind CLI if required."]
+    },
+    {
+      "description": "Never automerge major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "dependencyDashboardApproval": false
+    }
+  ]
+}

@@ -12,7 +12,8 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "Kubernetes version, i.e. the kindest/node image tag (see https://hub.docker.com/r/kindest/node/tags)."
   type        = string
-  default     = "v1.37.0"
+  # renovate: datasource=docker depName=kindest/node
+  default = "v1.37.0"
 
   validation {
     condition     = can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", var.kubernetes_version))
