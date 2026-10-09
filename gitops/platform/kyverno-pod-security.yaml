@@ -34,6 +34,7 @@ spec:
             - envoy-gateway-system
             - platform-gateway
             - monitoring
+            - cnpg-system
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
