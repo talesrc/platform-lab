@@ -64,6 +64,10 @@ def main():
             render(chart, name, ns, helm, out)
     for chart_dir in sorted((ROOT / "charts").iterdir()):
         chart = f"charts/{chart_dir.name}"
+        # Charts that need values (e.g. charts/app) ship ci/*-values.yaml and are rendered
+        # with those by validate-manifests.sh instead.
+        if list(chart_dir.glob("ci/*-values.yaml")):
+            continue
         if (chart_dir / "Chart.yaml").exists() and chart not in used:
             render(chart, chart_dir.name, "default", {}, out)
 
