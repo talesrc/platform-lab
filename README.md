@@ -23,9 +23,14 @@ Sync waves under `gitops/platform`:
 1. `cert-manager`, `envoy-gateway` and `kyverno` (wave -2)
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
-4. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
-5. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenancy](#tenancy))
-6. `backstage` (wave 1): developer portal (see [Developer portal](#developer-portal))
+4. `backstage` (wave -1): developer portal (see [Developer portal](#developer-portal))
+5. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
+6. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenancy](#tenancy))
+
+A wave starts only when every app of the previous one is Healthy, and `Degraded` counts as
+not Healthy. Platform services exposed through `platform-gateway` (wave 0) must therefore come
+earlier: the gateway's HTTPRoute to a Service that doesn't exist yet is Degraded, which would
+block every later wave.
 
 ## Requirements
 
