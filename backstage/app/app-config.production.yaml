@@ -80,9 +80,10 @@ argocd:
           url: http://argocd-server.argocd.svc
           token: ${ARGOCD_AUTH_TOKEN}
 
-# Grafana dashboards and alerts per entity (annotations grafana/dashboard-selector,
-# grafana/alert-label-selector). The browser calls Backstage's proxy; the Viewer token is
-# added server-side and never reaches the browser.
+# Grafana dashboards per entity (annotation grafana/dashboard-selector; it supports only
+# ==, !=, &&, || and `tags @> 'x'`, so match titles exactly). The alerts card is disabled
+# in app-config.yaml. The browser calls Backstage's proxy; the Viewer token is added
+# server-side and never reaches the browser.
 proxy:
   endpoints:
     /grafana/api:

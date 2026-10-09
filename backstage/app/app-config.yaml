@@ -8,6 +8,9 @@ app:
   extensions:
     # Midnight (packages/app/src/modules/theme) is the only theme: no light variant.
     - theme:app/light: false
+    # The Grafana alerts card only lists Grafana-managed alert rules; the lab's alerts are
+    # Prometheus rules in Alertmanager, so the card would only ever show "Missing Annotation".
+    - entity-card:grafana/alerts: false
 
     # Default landing page configuration.
     # The catalog is mounted at /catalog by default but is overridden here to
