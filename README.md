@@ -12,6 +12,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 | `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD and the root app-of-apps |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
+| `apps` | Argo CD (ApplicationSet) | Workloads on the golden path, one directory per app (see [Apps](#apps)) |
 | `charts/platform-gateway` | Argo CD | Shared Gateway API entrypoint: GatewayClass, Gateway, TLS, HTTPRoutes |
 | `scripts` | — | Workstation setup (Docker Engine in WSL) |
 
@@ -137,6 +138,40 @@ Test the custom policies locally with the [Kyverno CLI](https://kyverno.io/docs/
 kyverno test gitops/manifests/kyverno-policies/tests
 ```
 
+## Apps
+
+Workloads live in `apps/<name>/` and follow one golden path. An Argo CD ApplicationSet
+discovers every directory there and deploys it; there is no per-app Application to write.
+
+| Convention | Value |
+|---|---|
+| Source | `apps/<name>/kustomization.yaml` + plain manifests |
+| Namespace | `app-<name>`, set with `namespace:` in the kustomization; created by the ApplicationSet (don't add a Namespace object) |
+| URL | `https://<name>.apps.lab.localhost`: an HTTPRoute with `parentRefs: [{name: platform, namespace: platform-gateway, sectionName: https-apps}]` |
+| Pod labels | `app.kubernetes.io/name: <name>` and `app.kubernetes.io/part-of: apps` |
+| Metrics | a ServiceMonitor; Prometheus picks it up from any namespace |
+| Policies | must pass every lab Kyverno policy (requests + memory limit, pinned image tag, name label, Pod Security baseline) |
+
+`https-apps` is a second HTTPS listener on the platform gateway for `*.apps.lab.localhost`, with
+its own certificate from the lab CA (a wildcard covers one label only, so `*.lab.localhost` doesn't
+match `x.apps.lab.localhost`). HTTP requests are redirected to HTTPS as for platform hosts.
+
+**Add an app:** copy `apps/podinfo/`, rename it, adjust image/ports/hostname, push. CI builds it
+(`kubectl kustomize`), validates the schemas and runs every lab policy against it
+(`scripts/ci/check-app-policies.sh`); a violation fails the build, even though the cluster
+itself only audits. Once merged, the ApplicationSet creates `app-<name>` and syncs it.
+
+**Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas, non-root, read-only
+root filesystem, PodDisruptionBudget, ServiceMonitor). Verify:
+
+```bash
+kubectl get pods,httproute -n app-podinfo
+curl --cacert platform-ca.crt https://podinfo.apps.lab.localhost/
+kubectl get policyreport -n app-podinfo   # should list no failures
+```
+
+In Prometheus, the `podinfo` target should be up (`up{namespace="app-podinfo"}`).
+
 ## Tear it down
 
 ```bash
@@ -153,8 +188,8 @@ GitHub Actions (`.github/workflows/`) runs on every pull request and push to `ma
 | Job | Checks |
 |---|---|
 | Terraform | `terraform fmt -check`, `init -backend=false` + `validate` for every module in `terraform/` |
-| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
-| Kyverno policy tests | `kyverno test gitops/`: every policy against the good/bad sample resources in `tests/` dirs |
+| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` plus every `kubectl kustomize apps/*` build with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
+| Kyverno policy tests | `kyverno test gitops/`: every policy against the good/bad sample resources in `tests/` dirs; then `scripts/ci/check-app-policies.sh`: every `apps/*` must pass all lab policies |
 | Conventional Commits | commitlint on the PR's commits (`commitlint.config.mjs`); the PR title is checked too, since squash merges use it |
 | Workflow lint | actionlint on the workflows |
 

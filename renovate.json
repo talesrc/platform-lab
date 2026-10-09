@@ -12,6 +12,9 @@
   "argocd": {
     "managerFilePatterns": ["/^gitops/.+\\.ya?ml$/"]
   },
+  "kubernetes": {
+    "managerFilePatterns": ["/^apps/.+\\.ya?ml$/"]
+  },
   "customManagers": [
     {
       "description": "Versions marked with '# renovate:' comments in Terraform files (helm chart defaults, kindest/node tag + optional digest on the next line)",
