@@ -18,7 +18,7 @@ Sync waves under `gitops/platform`:
 
 1. `cert-manager` and `envoy-gateway` (wave -2)
 2. `cert-manager-issuers` (wave -1): self-signed root → `platform-ca` ClusterIssuer
-3. `platform-gateway` (wave 0): wildcard `*.localtest.me` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
+3. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
 
 ## Requirements
 
@@ -42,13 +42,13 @@ kubectl get applications -n argocd
 Argo CD: `terraform output argocd_url` (user `admin`, password from
 `terraform output -raw argocd_admin_password_command`).
 
-`*.localtest.me` resolves to `127.0.0.1`, so no hosts-file changes are needed.
+`*.localhost` names (RFC 6761) resolve to `127.0.0.1` in browsers and curl, so no DNS or hosts-file changes are needed. Other tools use the OS resolver, which does not resolve them.
 
 ### Trusting the lab CA
 
 The gateway certificate is signed by a local CA. Export it with
 `eval "$(terraform output -raw ca_certificate_command)"` and either pass it to curl
-(`curl --cacert platform-ca.crt https://argocd.localtest.me`) or import it into your
+(`curl --cacert platform-ca.crt https://argocd.lab.localhost`) or import it into your
 OS/browser trust store (Windows: `certutil -user -addstore Root platform-ca.crt`).
 
 ## Tear it down

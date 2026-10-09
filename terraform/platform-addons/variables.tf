@@ -10,7 +10,7 @@ variable "argocd" {
     chart_version      = optional(string, "10.10.2")
     apps_chart_version = optional(string, "2.0.6") # argocd-apps chart (root Application)
     namespace          = optional(string, "argocd")
-    hostname           = optional(string, "argocd.localtest.me") # *.localtest.me resolves to 127.0.0.1
+    hostname           = optional(string, "argocd.lab.localhost") # *.localhost resolves to 127.0.0.1 in browsers/curl
   })
   default = {}
 }

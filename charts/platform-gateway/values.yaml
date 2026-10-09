@@ -14,7 +14,7 @@ gateway:
     enabled: true
     port: 443
     nodePort: 30443
-    hostname: "*.localtest.me"
+    hostname: "*.lab.localhost"
     # Wildcard certificate issued by cert-manager (see gitops/manifests/cert-manager-issuers).
     certificate:
       secretName: platform-gateway-tls
@@ -22,7 +22,7 @@ gateway:
         kind: ClusterIssuer
         name: platform-ca
       dnsNames:
-        - "*.localtest.me"
+        - "*.lab.localhost"
   # Redirect every plain-HTTP request to HTTPS (only when https.enabled).
   redirectHttpToHttps: true
 
@@ -30,7 +30,7 @@ gateway:
 # when it is enabled, otherwise to http.
 # - name: argocd
 #   namespace: argocd
-#   hostname: argocd.localtest.me
+#   hostname: argocd.lab.localhost
 #   service: argocd-server
 #   port: 80
 routes: []
