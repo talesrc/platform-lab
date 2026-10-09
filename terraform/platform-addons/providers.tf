@@ -15,3 +15,7 @@ provider "helm" {
     config_path = local.cluster.kubeconfig_path
   }
 }
+
+provider "kubernetes" {
+  config_path = local.cluster.kubeconfig_path
+}

@@ -1,0 +1,179 @@
+# Backstage software catalog for platform-lab (loaded from this file on main).
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform-team
+  description: Owns and runs platform-lab.
+spec:
+  type: team
+  children: []
+  members: [talesrc]
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: talesrc
+spec:
+  profile:
+    displayName: Tales Ribeiro
+  memberOf: [platform-team]
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: platform-lab
+  description: Local internal developer platform on kind, bootstrapped by Terraform and run by Argo CD.
+  annotations:
+    github.com/project-slug: talesrc/platform-lab
+  links:
+    - url: https://github.com/talesrc/platform-lab
+      title: Repository
+spec:
+  owner: group:platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: argocd
+  title: Argo CD
+  description: GitOps controller; syncs gitops/platform (app-of-apps) and the apps.
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/terraform/platform-addons
+  links:
+    - url: https://argocd.lab.localhost
+      title: Argo CD UI
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: envoy-gateway
+  title: Envoy Gateway
+  description: Gateway API implementation; the controller behind the shared platform Gateway.
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/platform
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform-gateway
+  title: Platform Gateway
+  description: Shared HTTPS entrypoint (*.lab.localhost) with wildcard TLS and per-service routes.
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/charts/platform-gateway
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+  dependsOn:
+    - component:envoy-gateway
+    - component:cert-manager
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: cert-manager
+  title: cert-manager
+  description: Issues TLS certificates from the lab CA (platform-ca ClusterIssuer).
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/manifests/cert-manager-issuers
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: kyverno
+  title: Kyverno
+  description: Policy engine; platform guardrails in Audit mode.
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/manifests/kyverno-policies
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: kube-prometheus-stack
+  title: Observability
+  description: Prometheus, Alertmanager and Grafana (plus metrics-server for kubectl top).
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/platform
+  links:
+    - url: https://grafana.lab.localhost
+      title: Grafana
+    - url: https://prometheus.lab.localhost
+      title: Prometheus
+    - url: https://alertmanager.lab.localhost
+      title: Alertmanager
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: registry-cache
+  title: Registry cache
+  description: Pull-through image caches for the kind nodes (Docker, outside the cluster).
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/terraform/registry-cache
+spec:
+  type: platform-service
+  lifecycle: production
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage
+  title: Backstage
+  description: This developer portal (catalog + golden-path templates).
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/backstage
+  links:
+    - url: https://backstage.lab.localhost
+      title: Backstage
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:platform-team
+  system: platform-lab
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: podinfo
+  title: podinfo
+  description: Reference application on the golden path (apps/podinfo).
+  annotations:
+    backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
+  links:
+    - url: https://podinfo.apps.lab.localhost
+      title: podinfo
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:platform-team
+  system: platform-lab
+  dependsOn:
+    - component:platform-gateway

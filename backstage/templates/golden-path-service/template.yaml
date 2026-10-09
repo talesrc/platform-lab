@@ -1,0 +1,137 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: golden-path-service
+  title: Golden-path service
+  description: >-
+    A containerized HTTP service on the platform: Deployment, Service, HTTPS route at
+    <name>.apps.lab.localhost and Prometheus scraping. Opens a pull request to
+    platform-lab; merging it deploys the service through Argo CD.
+  tags: [recommended, kubernetes, gitops]
+spec:
+  owner: group:platform-team
+  type: service
+  system: platform-lab
+
+  parameters:
+    - title: Service
+      required: [name, owner]
+      properties:
+        name:
+          title: Name
+          type: string
+          description: DNS label; becomes apps/<name>, namespace app-<name> and <name>.apps.lab.localhost.
+          pattern: "^[a-z]([-a-z0-9]{0,30}[a-z0-9])?$"
+          ui:autofocus: true
+        description:
+          title: Description
+          type: string
+          default: A service on the platform-lab golden path.
+        owner:
+          title: Owner
+          type: string
+          default: group:platform-team
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: [Group, User]
+    - title: Container
+      required: [image, tag, port]
+      properties:
+        image:
+          title: Image (without tag)
+          type: string
+          default: ghcr.io/stefanprodan/podinfo
+        tag:
+          title: Tag
+          type: string
+          description: A pinned version; `latest` is rejected by the platform policies.
+          default: "6.15.0"
+          pattern: "^(?!latest$)[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+        port:
+          title: Container port
+          type: integer
+          default: 9898
+        metricsPath:
+          title: Prometheus metrics path
+          type: string
+          default: /metrics
+        readinessPath:
+          title: Readiness probe path
+          type: string
+          default: /readyz
+        livenessPath:
+          title: Liveness probe path
+          type: string
+          default: /healthz
+    - title: Resources
+      properties:
+        replicas:
+          title: Replicas
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 3
+        cpuRequest:
+          title: CPU request
+          type: string
+          default: 50m
+        memoryRequest:
+          title: Memory request
+          type: string
+          default: 64Mi
+        memoryLimit:
+          title: Memory limit
+          type: string
+          default: 128Mi
+
+  steps:
+    - id: fetch
+      name: Render manifests
+      action: fetch:template
+      input:
+        url: ./skeleton
+        targetPath: apps/${{ parameters.name }}
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          image: ${{ parameters.image }}
+          tag: ${{ parameters.tag }}
+          port: ${{ parameters.port }}
+          metricsPath: ${{ parameters.metricsPath }}
+          readinessPath: ${{ parameters.readinessPath }}
+          livenessPath: ${{ parameters.livenessPath }}
+          replicas: ${{ parameters.replicas }}
+          cpuRequest: ${{ parameters.cpuRequest }}
+          memoryRequest: ${{ parameters.memoryRequest }}
+          memoryLimit: ${{ parameters.memoryLimit }}
+
+    - id: publish
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?owner=talesrc&repo=platform-lab
+        branchName: apps/add-${{ parameters.name }}
+        title: "feat(apps): add ${{ parameters.name }}"
+        commitMessage: "feat(apps): add ${{ parameters.name }}"
+        description: |
+          Adds `apps/${{ parameters.name }}` from the golden-path template.
+
+          Merging deploys it to namespace `app-${{ parameters.name }}` through the apps
+          ApplicationSet, at https://${{ parameters.name }}.apps.lab.localhost.
+
+    # Registered before the PR is merged; the entity appears once the file is on main.
+    - id: register
+      name: Register in the catalog
+      action: catalog:register
+      input:
+        catalogInfoUrl: https://github.com/talesrc/platform-lab/blob/main/apps/${{ parameters.name }}/catalog-info.yaml
+        optional: true
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps['publish'].output.remoteUrl }}
+      - title: Service URL (after merge)
+        url: https://${{ parameters.name }}.apps.lab.localhost

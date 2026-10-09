@@ -36,6 +36,11 @@ spec:
             hostname: alertmanager.lab.localhost
             service: kube-prometheus-stack-alertmanager
             port: 9093
+          - name: backstage
+            namespace: backstage
+            hostname: backstage.lab.localhost
+            service: backstage
+            port: 7007
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-gateway

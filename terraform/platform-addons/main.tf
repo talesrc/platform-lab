@@ -128,5 +128,30 @@ resource "helm_release" "argocd_apps" {
     }
   })]
 
-  depends_on = [helm_release.argocd]
+  # The backstage namespace must exist before Argo CD syncs the gateway route into it.
+  depends_on = [helm_release.argocd, kubernetes_namespace_v1.backstage]
+}
+
+# Backstage (gitops/platform/backstage.yaml) runs in this namespace. It is created here,
+# not by Argo CD, so the platform-gateway HTTPRoute (wave 0) never races Backstage
+# (wave 1), and so the optional token Secret below has somewhere to live.
+resource "kubernetes_namespace_v1" "backstage" {
+  metadata {
+    name = "backstage"
+  }
+}
+
+# GitHub token for Backstage's scaffolder (opening PRs) and catalog reads. Never in git:
+# set backstage_github_token in terraform.tfvars. Without it the portal runs read-only.
+resource "kubernetes_secret_v1" "backstage_github" {
+  count = var.backstage_github_token == null ? 0 : 1
+
+  metadata {
+    name      = "backstage-github"
+    namespace = kubernetes_namespace_v1.backstage.metadata[0].name
+  }
+
+  data = {
+    GITHUB_TOKEN = var.backstage_github_token
+  }
 }

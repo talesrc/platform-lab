@@ -9,12 +9,14 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 |---|---|---|
 | `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io, ecr-public.aws.com; reg.kyverno.io via ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
-| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD and the root app-of-apps |
+| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD, the root app-of-apps, the `backstage` namespace and its optional GitHub token |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
 | `apps` | Argo CD (ApplicationSet) | Workloads on the golden path, one directory per app (see [Apps](#apps)) |
 | `charts/platform-gateway` | Argo CD | Shared Gateway API entrypoint: GatewayClass, Gateway, TLS, HTTPRoutes |
-| `apps` | Tenants | One directory per application, deployed by the `apps` ApplicationSet (see [Tenant apps](#tenant-apps)) |
+| `apps` | Tenants | One directory per application, deployed by the `apps` ApplicationSet (see [Tenant apps](#tenancy)) |
+| `backstage/templates` | Backstage | Software templates (golden paths) |
+| `catalog-info.yaml` | Backstage | Software catalog: system, components, team |
 | `scripts` | — | Workstation setup (Docker Engine in WSL) |
 
 Sync waves under `gitops/platform`:
@@ -23,7 +25,8 @@ Sync waves under `gitops/platform`:
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
 4. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
-5. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenant apps](#tenant-apps))
+5. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenant apps](#tenancy))
+6. `backstage` (wave 1): developer portal (see [Developer portal](#developer-portal))
 
 ## Requirements
 
@@ -218,6 +221,34 @@ Without an organization any GitHub user can authenticate, so access comes only f
 and `argocd_app_developers` get `role:app-developer`, which can only manage Applications of
 the `apps` project. The client secret is passed with `set_sensitive`: it never appears in git
 or plan output, but it is stored in the local Terraform state and in the `argocd-secret` Secret.
+
+## Developer portal
+
+[Backstage](https://backstage.io/) runs at https://backstage.lab.localhost (sign in as guest, mapped to
+`user:default/talesrc`). It is the upstream demo image (`ghcr.io/backstage/backstage`) with
+in-memory SQLite, so there is no database to run: the catalog is reloaded from git on every
+restart.
+
+- **Catalog:** `catalog-info.yaml` (system `platform-lab`, its components, team and user), read
+  from `main` on GitHub every 10 minutes.
+- **Golden-path template:** *Create → Golden-path service* renders
+  `backstage/templates/golden-path-service/skeleton` into `apps/<name>/` (Deployment, Service,
+  HTTPRoute at `<name>.apps.lab.localhost`, ServiceMonitor; compliant with the Kyverno policies)
+  and opens a pull request. Merging it deploys the service through the apps ApplicationSet;
+  the component shows up in the catalog once its `catalog-info.yaml` is on `main`.
+
+Opening pull requests needs a GitHub token (without one the portal is read-only and catalog
+reads use GitHub's anonymous rate limit of 60 requests/hour). Create a
+[fine-grained PAT](https://github.com/settings/personal-access-tokens/new) for
+`talesrc/platform-lab` only, with **Contents** and **Pull requests** set to *Read and write*,
+then add it to `terraform/platform-addons/terraform.tfvars` (git-ignored) and apply:
+
+```hcl
+backstage_github_token = "github_pat_..."
+```
+
+Terraform stores it as the `backstage-github` Secret, which Backstage reads as `GITHUB_TOKEN`
+(restart the pod after changing it: `kubectl -n backstage rollout restart deploy/backstage`).
 
 ## Tear it down
 

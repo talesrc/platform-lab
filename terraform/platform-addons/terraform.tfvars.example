@@ -23,3 +23,6 @@ gitops = {
   target_revision = "main"
   path            = "gitops/platform"
 }
+
+# Backstage scaffolder token; keep it only in terraform.tfvars (git-ignored).
+# backstage_github_token = "github_pat_..."

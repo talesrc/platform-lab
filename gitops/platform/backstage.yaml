@@ -1,0 +1,104 @@
+# Backstage developer portal: software catalog + golden-path templates.
+# The namespace (and the optional GitHub token Secret) is created by
+# terraform/platform-addons, so it exists before the gateway route is synced.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://backstage.github.io/charts
+    chart: backstage
+    targetRevision: 2.10.2
+    helm:
+      valuesObject:
+        backstage:
+          # Upstream demo image (`npx @backstage/create-app` build): catalog, scaffolder
+          # with the GitHub module, guest/GitHub auth, SQLite. No custom plugins.
+          image:
+            registry: ghcr.io
+            repository: backstage/backstage
+            tag: "1.55.2"
+          # The chart only appends the generated app-config; keep the image's own files first.
+          args:
+            - --config
+            - app-config.yaml
+            - --config
+            - app-config.production.yaml
+          podSecurityContext:
+            runAsNonRoot: true
+            runAsUser: 1000 # "node" in the image
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containerSecurityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          extraEnvVars:
+            # Created by terraform/platform-addons only when backstage_github_token is set.
+            # Without it the portal runs read-only (anonymous, rate-limited GitHub access).
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: backstage-github
+                  key: GITHUB_TOKEN
+                  optional: true
+          appConfig:
+            app:
+              title: platform-lab
+              baseUrl: https://backstage.lab.localhost
+            organization:
+              name: platform-lab
+            backend:
+              baseUrl: https://backstage.lab.localhost
+              cors:
+                origin: https://backstage.lab.localhost
+              # The image defaults to PostgreSQL in production; the lab uses in-memory
+              # SQLite, so the catalog is rebuilt from git on every restart.
+              database:
+                client: better-sqlite3
+                connection: ":memory:"
+            auth:
+              providers:
+                guest:
+                  # The image runs with NODE_ENV=production, where guest login is off by default.
+                  dangerouslyAllowOutsideDevelopment: true
+                  userEntityRef: user:default/talesrc
+            catalog:
+              # Be gentle with GitHub's anonymous rate limit (60 requests/hour).
+              processingInterval:
+                minutes: 10
+              rules:
+                - allow: [Component, System, API, Resource, Location, Domain, Group, User, Template]
+              locations:
+                - type: url
+                  target: https://github.com/talesrc/platform-lab/blob/main/catalog-info.yaml
+                - type: url
+                  target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backstage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

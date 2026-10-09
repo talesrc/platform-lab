@@ -54,3 +54,10 @@ variable "argocd_app_developers" {
   type        = list(string)
   default     = []
 }
+
+variable "backstage_github_token" {
+  description = "Fine-grained GitHub PAT for Backstage (Contents + Pull requests read/write on platform-lab). null = read-only portal."
+  type        = string
+  default     = null
+  sensitive   = true
+}
