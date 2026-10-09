@@ -145,9 +145,10 @@ techdocs:
 
 auth:
   # see https://backstage.io/docs/auth/ to learn about auth providers
-  providers:
-    # See https://backstage.io/docs/auth/guest/provider
-    guest: {}
+  # The app only offers GitHub sign-in (app-config.production.yaml). To sign in locally,
+  # add auth.providers.github.development with an OAuth app whose callback is
+  # http://localhost:7007/api/auth/github/handler/frame.
+  providers: {}
   # see https://backstage.io/docs/ai/mcp-actions#client-id-metadata-documents
   # to learn more about client id metadata documents
   clientIdMetadataDocuments:
@@ -165,37 +166,15 @@ scaffolder:
   # see https://backstage.io/docs/features/software-templates/configuration for software template options
 
 catalog:
-  import:
-    entityFilename: catalog-info.yaml
-    pullRequestBranchName: backstage-integration
   rules:
-    - allow: [Component, System, API, Resource, Location]
+    - allow: [Component, System, API, Resource, Location, Domain, Group, User, Template]
   locations:
-    # Local example data, file locations are relative to the backend process, typically `packages/backend`
+    # Local runs read the same catalog as production, from this checkout (paths are
+    # relative to packages/backend). Production reads them from GitHub instead.
     - type: file
-      target: ../../examples/entities.yaml
-
-    # Local example template
+      target: ../../../../catalog-info.yaml
     - type: file
-      target: ../../examples/template/template.yaml
-      rules:
-        - allow: [Template]
-
-    # Local example organizational data
-    - type: file
-      target: ../../examples/org.yaml
-      rules:
-        - allow: [User, Group]
-
-    ## Uncomment these lines to add more example data
-    # - type: url
-    #   target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
-
-    ## Uncomment these lines to add an example org
-    # - type: url
-    #   target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/acme-corp.yaml
-    #   rules:
-    #     - allow: [User, Group]
+      target: ../../../templates/golden-path-service/template.yaml
 
 kubernetes:
   # see https://backstage.io/docs/features/kubernetes/configuration for kubernetes configuration options
