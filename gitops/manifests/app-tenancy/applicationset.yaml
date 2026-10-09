@@ -1,0 +1,56 @@
+# One Application per directory under apps/: apps/<name>/ (Kustomize) is deployed to
+# namespace app-<name> under the restricted `apps` project.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/talesrc/platform-lab.git
+        revision: main
+        directories:
+          - path: apps/*
+  # Default policy (sync): removing apps/<name>/ deletes its Application and, through the
+  # resources finalizer below, its resources, so git stays the source of truth. If git can't
+  # be read, the generator errors and existing Applications are left untouched.
+  # preserveResourcesOnDeletion: false = deleting this ApplicationSet also removes the
+  # tenants' resources (fine for a lab; set true to keep workloads running).
+  syncPolicy:
+    preserveResourcesOnDeletion: false
+  template:
+    metadata:
+      name: "{{ .path.basename }}"
+      labels:
+        app.kubernetes.io/part-of: apps
+        platform-lab/tenant: "{{ .path.basename }}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: apps
+      source:
+        repoURL: https://github.com/talesrc/platform-lab.git
+        targetRevision: main
+        path: "{{ .path.path }}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "app-{{ .path.basename }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        managedNamespaceMetadata:
+          labels:
+            app.kubernetes.io/part-of: apps
+            platform-lab/tenant: "{{ .path.basename }}"
+        retry:
+          limit: 10
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

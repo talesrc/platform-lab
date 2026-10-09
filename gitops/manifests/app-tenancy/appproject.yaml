@@ -1,0 +1,48 @@
+# Guardrails for every application generated from apps/<name>/ (see applicationset.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+  annotations:
+    # Must exist before the ApplicationSet creates Applications that reference it.
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    # Keeps the project until no Application uses it.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Tenant applications from apps/<name>/, each in its own app-<name> namespace
+  sourceRepos:
+    - https://github.com/talesrc/platform-lab.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: app-*
+  # CreateNamespace=true is a cluster-scoped Namespace create, which Argo CD checks
+  # against this whitelist. Nothing else cluster-scoped (no CRDs, ClusterRoles, ...).
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  # Quotas, limits and network isolation are the platform's call, not the tenant's.
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+  orphanedResources:
+    warn: true
+  # Project-scoped roles, e.g. for CI tokens or SSO groups (`groups:`). Users get the
+  # same permissions through role:app-developer in argocd-rbac-cm (terraform/platform-addons).
+  roles:
+    - name: read-only
+      description: View tenant applications
+      policies:
+        - p, proj:apps:read-only, applications, get, apps/*, allow
+        - p, proj:apps:read-only, logs, get, apps/*, allow
+    - name: deployer
+      description: View and sync tenant applications (e.g. for CI)
+      policies:
+        - p, proj:apps:deployer, applications, get, apps/*, allow
+        - p, proj:apps:deployer, applications, sync, apps/*, allow
+        - p, proj:apps:deployer, logs, get, apps/*, allow

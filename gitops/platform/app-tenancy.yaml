@@ -1,0 +1,30 @@
+# The `apps` AppProject and ApplicationSet (tenant applications from apps/<name>/).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-tenancy
+  namespace: argocd
+  annotations:
+    # After the gateway (wave 0) and monitoring CRDs (wave -1) that tenant apps use.
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/talesrc/platform-lab.git
+    targetRevision: main
+    path: gitops/manifests/app-tenancy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
