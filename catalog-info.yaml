@@ -39,6 +39,9 @@ metadata:
   description: GitOps controller; syncs gitops/platform (app-of-apps) and the apps.
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/terraform/platform-addons
+    backstage.io/kubernetes-namespace: argocd
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=argocd'
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
   links:
     - url: https://argocd.lab.localhost
       title: Argo CD UI
@@ -56,6 +59,10 @@ metadata:
   description: Gateway API implementation; the controller behind the shared platform Gateway.
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/platform
+    backstage.io/kubernetes-namespace: envoy-gateway-system
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=envoy-gateway'
+    argocd/app-name: envoy-gateway
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
 spec:
   type: platform-service
   lifecycle: production
@@ -70,6 +77,10 @@ metadata:
   description: Shared HTTPS entrypoint (*.lab.localhost) with wildcard TLS and per-service routes.
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/charts/platform-gateway
+    backstage.io/kubernetes-namespace: envoy-gateway-system
+    backstage.io/kubernetes-label-selector: 'gateway.envoyproxy.io/owning-gateway-name=platform'
+    argocd/app-name: platform-gateway
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
 spec:
   type: platform-service
   lifecycle: production
@@ -87,6 +98,10 @@ metadata:
   description: Issues TLS certificates from the lab CA (platform-ca ClusterIssuer).
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/manifests/cert-manager-issuers
+    backstage.io/kubernetes-namespace: cert-manager
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=cert-manager'
+    argocd/app-name: cert-manager
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
 spec:
   type: platform-service
   lifecycle: production
@@ -101,6 +116,10 @@ metadata:
   description: Policy engine; platform guardrails in Audit mode.
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/manifests/kyverno-policies
+    backstage.io/kubernetes-namespace: kyverno
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=kyverno'
+    argocd/app-name: kyverno
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
 spec:
   type: platform-service
   lifecycle: production
@@ -115,6 +134,10 @@ metadata:
   description: Prometheus, Alertmanager and Grafana (plus metrics-server for kubectl top).
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/gitops/platform
+    backstage.io/kubernetes-namespace: monitoring
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance'
+    argocd/app-name: kube-prometheus-stack
+    grafana/dashboard-selector: "tags @> 'kubernetes-mixin'"
   links:
     - url: https://grafana.lab.localhost
       title: Grafana
@@ -150,6 +173,10 @@ metadata:
   description: This developer portal (catalog + golden-path templates).
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/backstage
+    backstage.io/kubernetes-namespace: backstage
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=backstage'
+    argocd/app-name: backstage
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
   links:
     - url: https://backstage.lab.localhost
       title: Backstage
@@ -167,6 +194,10 @@ metadata:
   description: Reference application on the golden path (apps/podinfo).
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
+    backstage.io/kubernetes-namespace: app-podinfo
+    backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=podinfo'
+    argocd/app-name: podinfo
+    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
   links:
     - url: https://podinfo.apps.lab.localhost
       title: podinfo
