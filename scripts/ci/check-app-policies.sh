@@ -24,11 +24,15 @@ policies=("$ROOT"/gitops/manifests/kyverno-policies/*.yaml "$OUT/pod-security.ya
 
 status=0
 for app in "$ROOT"/apps/*/; do
-  [ -f "$app/kustomization.yaml" ] || continue
+  [ -f "$app/Chart.yaml" ] || [ -f "$app/kustomization.yaml" ] || continue
   name="$(basename "$app")"
-  echo "::group::apps/$name"
-  kubectl kustomize "$app" > "$OUT/app-$name.yaml"
-  kyverno apply "${policies[@]}" --resource "$OUT/app-$name.yaml" || status=1
-  echo "::endgroup::"
+  # Pinned: what Argo CD deploys today. Local: the app with the charts/app working copy,
+  # so a chart change that breaks the policies fails before it is published.
+  for mode in pinned local; do
+    echo "::group::apps/$name ($mode)"
+    "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" > "$OUT/app-$name-$mode.yaml"
+    kyverno apply "${policies[@]}" --resource "$OUT/app-$name-$mode.yaml" || status=1
+    echo "::endgroup::"
+  done
 done
 exit "$status"

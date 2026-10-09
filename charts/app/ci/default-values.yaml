@@ -1,0 +1,5 @@
+# Minimal values for linting/rendering the chart in CI (chart-testing convention: ci/*-values.yaml).
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  tag: "6.15.0"
+port: 9898

@@ -7,3 +7,7 @@ description: >-
 type: application
 version: 0.1.0
 home: https://github.com/talesrc/platform-lab/tree/main/charts/app
+# Becomes the OCI annotation org.opencontainers.image.source, which links the ghcr.io package
+# to this repository; without it the workflow's GITHUB_TOKEN can't create the package.
+sources:
+  - https://github.com/talesrc/platform-lab

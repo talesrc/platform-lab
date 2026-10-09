@@ -2,7 +2,7 @@
 # Lints the local Helm charts and validates every Kubernetes manifest in the
 # repo (rendered charts, kustomize-built apps/* and YAML under gitops/) against
 # Kubernetes and CRD schemas.
-# Requires: helm, kubectl (kustomize), kubeconform, python3 with PyYAML.
+# Requires: helm, kubectl (kustomize apps), kubeconform, python3 with PyYAML.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -12,7 +12,14 @@ trap 'rm -rf "$OUT"' EXIT
 
 echo "::group::helm lint"
 for chart in "$ROOT"/charts/*/; do
-  helm lint --strict "$chart"
+  # Charts that require values (e.g. charts/app) ship them in ci/*-values.yaml.
+  if compgen -G "${chart}ci/*-values.yaml" >/dev/null; then
+    for values in "${chart}"ci/*-values.yaml; do
+      helm lint --strict "$chart" -f "$values"
+    done
+  else
+    helm lint --strict "$chart"
+  fi
 done
 echo "::endgroup::"
 
@@ -20,12 +27,18 @@ echo "::group::helm template"
 python3 "$ROOT/scripts/ci/render-charts.py" "$OUT/rendered"
 echo "::endgroup::"
 
-echo "::group::kustomize build apps"
+echo "::group::render apps (pinned chart + local charts/app)"
 for app in "$ROOT"/apps/*/; do
-  [ -f "$app/kustomization.yaml" ] || continue
+  [ -f "$app/Chart.yaml" ] || [ -f "$app/kustomization.yaml" ] || continue
   name="$(basename "$app")"
-  kubectl kustomize "$app" > "$OUT/rendered/app-$name.yaml"
-  echo "built apps/$name -> rendered/app-$name.yaml"
+  for mode in pinned local; do
+    "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" > "$OUT/rendered/app-$name-$mode.yaml"
+    echo "rendered apps/$name ($mode) -> rendered/app-$name-$mode.yaml"
+  done
+done
+for values in "$ROOT"/charts/app/ci/*-values.yaml; do
+  [ -f "$values" ] || continue
+  helm template ci "$ROOT/charts/app" -f "$values" > "$OUT/rendered/chart-app-$(basename "$values" .yaml).yaml"
 done
 echo "::endgroup::"
 

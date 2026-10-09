@@ -1,0 +1,11 @@
+# Exercises the optional parts: replicas > 1 (PDB), command/args/env, extra writable paths.
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  tag: "6.15.0"
+command: [./podinfo]
+args: [--port=9898, --data-path=/data]
+env:
+  EXAMPLE: "true"
+replicas: 2
+port: 9898
+writablePaths: [/tmp, /data]
