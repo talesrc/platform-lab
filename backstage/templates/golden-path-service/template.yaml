@@ -123,6 +123,22 @@ spec:
           Merging deploys it to namespace `app-${{ parameters.name }}` through the apps
           ApplicationSet, at https://${{ parameters.name }}.apps.lab.localhost.
 
+    # Keeps the PR link in the creator's notifications after they leave this page. Argo CD
+    # notifies the owner again once the merged app is deployed (gitops/manifests/app-tenancy).
+    - id: notify
+      name: Notify you
+      action: notification:send
+      input:
+        recipients: entity
+        entityRefs:
+          - ${{ user.ref }}
+        title: "${{ parameters.name }}: pull request ready for review"
+        info: Merge it to deploy ${{ parameters.name }} to https://${{ parameters.name }}.apps.lab.localhost.
+        link: ${{ steps['publish'].output.remoteUrl }}
+        topic: golden-path
+        # A notification failure must not fail a run whose pull request already exists.
+        optional: true
+
   output:
     links:
       - title: Pull request
