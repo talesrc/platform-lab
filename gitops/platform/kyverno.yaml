@@ -23,10 +23,13 @@ spec:
       skipTests: true
       valuesObject:
         kyverno-api:
-          # The CRD templates render `labels: {}` by default; the API server drops
-          # empty maps, so Argo CD would report those CRDs as OutOfSync forever.
+          # The CRD templates render `labels: {}` / `annotations: {}` by default; the
+          # API server drops empty maps, so Argo CD would report those CRDs as
+          # OutOfSync forever. Both must be non-empty.
           labels:
             app.kubernetes.io/part-of: kyverno
+          annotations:
+            argocd.argoproj.io/sync-options: ServerSideApply=true
         config:
           # Webhooks never see kube-system; the chart appends the kyverno
           # namespace itself (config.excludeKyvernoNamespace: true).
