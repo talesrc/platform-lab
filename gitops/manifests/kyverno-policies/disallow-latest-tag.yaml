@@ -1,0 +1,50 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Images must be pinned to an explicit tag other than "latest", or to a digest, so
+      deployments are reproducible and rollbacks are meaningful.
+spec:
+  validationActions: [Audit]
+  failurePolicy: Ignore
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  matchConditions:
+    # Platform/system namespaces; keep in sync with gitops/platform/kyverno-pod-security.yaml.
+    - name: exclude-platform-namespaces
+      expression: >-
+        !(request.namespace in ['kube-system', 'kube-public', 'kube-node-lease',
+        'local-path-storage', 'kyverno', 'argocd', 'cert-manager', 'envoy-gateway-system',
+        'platform-gateway', 'monitoring'])
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : []) +
+        (has(object.spec.ephemeralContainers) ? object.spec.ephemeralContainers : [])
+    # An image is pinned if it has a digest, or its last path segment (so a registry
+    # port like "registry:5000/app" doesn't count as a tag) has a tag other than "latest".
+    - name: unpinned
+      expression: >-
+        variables.containers.filter(c, !(
+          c.image.contains('@') || (
+            c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+            !c.image.endsWith(':latest'))))
+  validations:
+    - expression: size(variables.unpinned) == 0
+      messageExpression: >-
+        'Images must use a tag other than "latest", or a digest; offending: ' +
+        variables.unpinned.map(c, c.name + '=' + c.image).join(', ')

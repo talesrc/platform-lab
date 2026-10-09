@@ -1,0 +1,78 @@
+# Kyverno policy engine (admission webhooks + background scanning + reports).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kyverno.github.io/kyverno
+    chart: kyverno
+    targetRevision: 3.9.1
+    helm:
+      # The chart's Helm test pods would otherwise run as regular workloads.
+      skipTests: true
+      valuesObject:
+        config:
+          # Webhooks never see kube-system; the chart appends the kyverno
+          # namespace itself (config.excludeKyvernoNamespace: true).
+          webhooks:
+            namespaceSelector:
+              matchExpressions:
+                - key: kubernetes.io/metadata.name
+                  operator: NotIn
+                  values:
+                    - kube-system
+        features:
+          # Lab safety net: if Kyverno is down, admission requests are allowed
+          # instead of failing, so it can't block the cluster (or its own recovery).
+          forceFailurePolicyIgnore:
+            enabled: true
+        admissionController:
+          replicas: 1
+        backgroundController:
+          replicas: 1
+        cleanupController:
+          replicas: 1
+        reportsController:
+          replicas: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  # Rules of aggregated ClusterRoles are filled in by the API server, not the chart.
+  ignoreDifferences:
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: kyverno:admission-controller
+      jsonPointers: [/rules]
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: kyverno:background-controller
+      jsonPointers: [/rules]
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: kyverno:cleanup-controller
+      jsonPointers: [/rules]
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: kyverno:reports-controller
+      jsonPointers: [/rules]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Kyverno CRDs exceed the client-side apply annotation size limit.
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

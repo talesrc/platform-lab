@@ -1,0 +1,58 @@
+# Run from the repo root:  kyverno test gitops/manifests/kyverno-policies/tests
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: platform-policies
+policies:
+  - ../require-requests-limits.yaml
+  - ../disallow-latest-tag.yaml
+  - ../require-app-name-label.yaml
+resources:
+  - resources.yaml
+results:
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/compliant, team-a/compliant-digest, team-a/latest-tag, team-a/untagged, team-a/unlabeled]
+    result: pass
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/no-resources, team-a/init-without-limit]
+    result: fail
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/compliant, team-a/compliant-digest, team-a/no-resources, team-a/init-without-limit, team-a/unlabeled]
+    result: pass
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/latest-tag, team-a/untagged]
+    result: fail
+  - policy: require-app-name-label
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/compliant, team-a/compliant-digest, team-a/no-resources, team-a/init-without-limit, team-a/latest-tag, team-a/untagged]
+    result: pass
+  - policy: require-app-name-label
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [team-a/unlabeled]
+    result: fail
+  # Excluded platform namespace: every policy skips it.
+  - policy: require-requests-limits
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [kube-system/platform-pod]
+    result: skip
+  - policy: disallow-latest-tag
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [kube-system/platform-pod]
+    result: skip
+  - policy: require-app-name-label
+    isValidatingPolicy: true
+    kind: Pod
+    resources: [kube-system/platform-pod]
+    result: skip

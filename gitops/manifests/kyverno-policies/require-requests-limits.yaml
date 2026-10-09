@@ -1,0 +1,54 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/title: Require Resource Requests and Memory Limits
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Every container must declare CPU and memory requests (so the scheduler can place it)
+      and a memory limit (so it can't starve its node). CPU limits are deliberately not
+      required: they cause throttling and are often counter-productive.
+spec:
+  validationActions: [Audit]
+  failurePolicy: Ignore
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  matchConditions:
+    # Platform/system namespaces; keep in sync with gitops/platform/kyverno-pod-security.yaml.
+    - name: exclude-platform-namespaces
+      expression: >-
+        !(request.namespace in ['kube-system', 'kube-public', 'kube-node-lease',
+        'local-path-storage', 'kyverno', 'argocd', 'cert-manager', 'envoy-gateway-system',
+        'platform-gateway', 'monitoring'])
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+    - name: missingRequests
+      expression: >-
+        variables.containers.filter(c, !(has(c.resources) && has(c.resources.requests) &&
+          'cpu' in c.resources.requests && 'memory' in c.resources.requests))
+    - name: missingMemoryLimit
+      expression: >-
+        variables.containers.filter(c, !(has(c.resources) && has(c.resources.limits) &&
+          'memory' in c.resources.limits))
+  validations:
+    - expression: size(variables.missingRequests) == 0
+      messageExpression: >-
+        'CPU and memory requests are required; missing in: ' +
+        variables.missingRequests.map(c, c.name).join(', ')
+    - expression: size(variables.missingMemoryLimit) == 0
+      messageExpression: >-
+        'A memory limit is required; missing in: ' +
+        variables.missingMemoryLimit.map(c, c.name).join(', ')

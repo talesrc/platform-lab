@@ -1,0 +1,132 @@
+# Sample Pods for `kyverno test` (not applied to the cluster).
+
+# Compliant with every platform policy.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  containers:
+    - name: web
+      image: nginx:1.29.1
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# Digest-pinned image, registry with a port, init container with resources.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-digest
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: worker
+spec:
+  initContainers:
+    - name: init
+      image: registry.local:5000/tools/init:v2
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+        limits: { memory: 32Mi }
+  containers:
+    - name: worker
+      image: ghcr.io/acme/worker@sha256:2b1a4d6e7c8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# No requests/limits at all.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-resources
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  containers:
+    - name: web
+      image: nginx:1.29.1
+---
+# Requests set, but the init container has no memory limit.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: init-without-limit
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  initContainers:
+    - name: init
+      image: busybox:1.37
+      resources:
+        requests: { cpu: 10m, memory: 16Mi }
+  containers:
+    - name: web
+      image: nginx:1.29.1
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# Explicit :latest tag.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: latest-tag
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  containers:
+    - name: web
+      image: nginx:latest
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# No tag (implies latest); the registry port must not be mistaken for a tag.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: untagged
+  namespace: team-a
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  containers:
+    - name: web
+      image: registry.local:5000/team-a/web
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# Missing app.kubernetes.io/name.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: unlabeled
+  namespace: team-a
+  labels:
+    app: web
+spec:
+  containers:
+    - name: web
+      image: nginx:1.29.1
+      resources:
+        requests: { cpu: 50m, memory: 64Mi }
+        limits: { memory: 128Mi }
+---
+# Violates everything, but lives in an excluded platform namespace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: platform-pod
+  namespace: kube-system
+spec:
+  containers:
+    - name: web
+      image: nginx

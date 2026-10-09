@@ -1,0 +1,52 @@
+# Pod Security Standards (baseline) from the upstream kyverno-policies chart,
+# rendered as CEL ValidatingPolicies, in Audit mode.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno-pod-security
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kyverno.github.io/kyverno
+    chart: kyverno-policies
+    targetRevision: 3.9.1
+    helm:
+      valuesObject:
+        policyType: ValidatingPolicy
+        podSecurityStandard: baseline
+        validationFailureAction: Audit
+        failurePolicy: Ignore
+        vpolExclude:
+          # Keep in sync with gitops/manifests/kyverno-policies.
+          excludeNamespaces:
+            - kube-system
+            - kube-public
+            - kube-node-lease
+            - local-path-storage
+            - kyverno
+            - argocd
+            - cert-manager
+            - envoy-gateway-system
+            - platform-gateway
+            - monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # CRDs come from the kyverno Application; don't fail dry-run before they exist.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
