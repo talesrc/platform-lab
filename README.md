@@ -121,3 +121,21 @@ kyverno test gitops/manifests/kyverno-policies/tests
 terraform -chdir=terraform/platform-addons destroy
 terraform -chdir=terraform/kind-cluster destroy
 ```
+
+## CI
+
+GitHub Actions (`.github/workflows/`) runs on every pull request and push to `main`:
+
+| Job | Checks |
+|---|---|
+| Terraform | `terraform fmt -check`, `init -backend=false` + `validate` for every module in `terraform/` |
+| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
+| Conventional Commits | commitlint on the PR's commits (`commitlint.config.mjs`); the PR title is checked too, since squash merges use it |
+| Workflow lint | actionlint on the workflows |
+
+Run the manifest checks locally with `scripts/ci/validate-manifests.sh` (needs helm, kubeconform, PyYAML).
+
+[Renovate](https://docs.renovatebot.com/) (`renovate.json`) opens PRs for chart versions in Argo CD Applications,
+Terraform providers, versions marked with `# renovate:` comments (Argo CD charts, `kindest/node` tag + digest),
+GitHub Actions and CI tool versions. It needs the [Renovate GitHub App](https://github.com/apps/renovate)
+installed on this repository.
