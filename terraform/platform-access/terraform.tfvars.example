@@ -1,0 +1,2 @@
+# cluster_state_path  = "../kind-cluster/terraform.tfstate"
+# token_renew_after   = "720h"
