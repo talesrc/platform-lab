@@ -1,0 +1,10 @@
+# Deployed by the apps ApplicationSet into namespace app-hello (Argo CD renders this chart).
+# All manifests come from the platform's golden-path chart (charts/app); this app only
+# pins its version and sets values (values.yaml). Renovate proposes chart upgrades.
+apiVersion: v2
+name: hello
+version: 1.0.0
+dependencies:
+  - name: app
+    version: 0.1.0
+    repository: oci://ghcr.io/talesrc/charts

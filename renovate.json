@@ -114,6 +114,20 @@
       "schedule": [
         "before 6am on monday"
       ]
+    },
+    {
+      "description": "Golden-path chart (charts/app) upgrades: one PR per app, so a chart release rolls out app by app",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "matchFileNames": [
+        "apps/**"
+      ],
+      "matchPackageNames": [
+        "app"
+      ],
+      "additionalBranchPrefix": "{{parentDir}}-",
+      "commitMessageSuffix": "in {{parentDir}}"
     }
   ]
 }

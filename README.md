@@ -155,29 +155,46 @@ kyverno test gitops/manifests/kyverno-policies/tests
 
 ## Apps
 
-Workloads live in `apps/<name>/` and follow one golden path. An Argo CD ApplicationSet
-discovers every directory there and deploys it; there is no per-app Application to write.
+Workloads live in `apps/<name>/` and follow one golden path: the platform-owned Helm chart
+**`charts/app`**, published to `oci://ghcr.io/talesrc/charts/app`. An app is two files; an
+Argo CD ApplicationSet discovers every directory and deploys it (no per-app Application).
+
+```
+apps/<name>/
+  Chart.yaml      # depends on a pinned version of the app chart
+  values.yaml     # values under `app:`, e.g. image, port, probes, replicas
+  Chart.lock      # resolved dependency digest (helm dependency update)
+  catalog-info.yaml   # Backstage entity (optional)
+```
 
 | Convention | Value |
 |---|---|
-| Source | `apps/<name>/kustomization.yaml` + plain manifests |
-| Namespace | `app-<name>`, set with `namespace:` in the kustomization; created by the ApplicationSet (don't add a Namespace object) |
-| URL | `https://<name>.apps.lab.localhost`: an HTTPRoute with `parentRefs: [{name: platform, namespace: platform-gateway, sectionName: https-apps}]` |
-| Pod labels | `app.kubernetes.io/name: <name>` and `app.kubernetes.io/part-of: apps` |
-| Metrics | a ServiceMonitor; Prometheus picks it up from any namespace |
-| Policies | must pass every lab Kyverno policy (requests + memory limit, pinned image tag, name label, Pod Security baseline) |
+| Manifests | rendered by `charts/app`: Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (replicas > 1) |
+| Defaults | non-root (UID 65532), read-only root filesystem (writable `emptyDir`s via `writablePaths`), no service-account token, requests + memory limit, `/readyz` + `/healthz` probes |
+| Values | `charts/app/values.yaml` documents them; `values.schema.json` rejects bad ones (e.g. a missing or `latest` image tag) before anything renders |
+| Namespace | `app-<name>`, created by the ApplicationSet |
+| URL | `https://<name>.apps.lab.localhost` (route on the gateway's `https-apps` listener) |
+| Policies | must pass every lab Kyverno policy; the chart's defaults already do |
+
+**Chart versions.** Apps pin the chart version, so a chart change reaches an app only through a
+version bump. Changing `charts/app` means bumping its `version` (the Charts workflow publishes it
+and never overwrites a published version); Renovate then opens **one PR per app** to upgrade,
+so a release rolls out app by app. CI renders every app with its pinned chart *and* with the
+local `charts/app`, and runs schemas and policies on both, so a chart change is tested against
+all apps before it is published (`scripts/ci/render-app.sh`).
 
 `https-apps` is a second HTTPS listener on the platform gateway for `*.apps.lab.localhost`, with
 its own certificate from the lab CA (a wildcard covers one label only, so `*.lab.localhost` doesn't
 match `x.apps.lab.localhost`). HTTP requests are redirected to HTTPS as for platform hosts.
 
-**Add an app:** copy `apps/podinfo/`, rename it, adjust image/ports/hostname, push. CI builds it
-(`kubectl kustomize`), validates the schemas and runs every lab policy against it
-(`scripts/ci/check-app-policies.sh`); a violation fails the build, even though the cluster
-itself only audits. Once merged, the ApplicationSet creates `app-<name>` and syncs it.
+**Add an app:** use Backstage (*Create → Golden-path service*), which opens a PR with
+`apps/<name>/`, or copy `apps/hello/` by hand. CI renders it, validates the schemas and runs
+every lab policy against it (`scripts/ci/check-app-policies.sh`); a violation fails the build,
+even though the cluster itself only audits. Once merged, the ApplicationSet creates `app-<name>`
+and syncs it, and the catalog picks up its `catalog-info.yaml` (a `Location` globs `apps/*`).
 
-**Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas, non-root, read-only
-root filesystem, PodDisruptionBudget, ServiceMonitor). Verify:
+**Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas, so it also gets a
+PodDisruptionBudget; custom command/args, `/data` as an extra writable path). Verify:
 
 ```bash
 kubectl get pods,httproute -n app-podinfo
@@ -325,7 +342,7 @@ GitHub Actions (`.github/workflows/`) runs on every pull request and push to `ma
 | Job | Checks |
 |---|---|
 | Terraform | `terraform fmt -check`, `init -backend=false` + `validate` for every module in `terraform/` |
-| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` plus every `kubectl kustomize apps/*` build with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
+| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` plus every `apps/*` (rendered with its pinned chart and with the local `charts/app`) with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
 | Kyverno policy tests | `kyverno test gitops/`: every policy against the good/bad sample resources in `tests/` dirs; then `scripts/ci/check-app-policies.sh`: every `apps/*` must pass all lab policies |
 | Conventional Commits | commitlint on the PR's commits (`commitlint.config.mjs`); the PR title is checked too, since squash merges use it |
 | Workflow lint | actionlint on the workflows |

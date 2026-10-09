@@ -1,0 +1,7 @@
+# Values for the golden-path chart (charts/app/values.yaml documents every option).
+# Created from the golden-path template: https://hello.apps.lab.localhost
+app:
+  image:
+    repository: ghcr.io/stefanprodan/podinfo
+    tag: "6.15.0"
+  port: 9898

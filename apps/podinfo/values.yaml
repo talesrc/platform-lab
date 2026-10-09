@@ -1,0 +1,22 @@
+# Values for the golden-path chart (charts/app/values.yaml documents every option).
+# Golden-path reference app: https://podinfo.apps.lab.localhost
+app:
+  image:
+    repository: ghcr.io/stefanprodan/podinfo
+    tag: "6.15.0"
+  # podinfo's binary is the image CMD (no ENTRYPOINT): args alone would replace it.
+  command: [./podinfo]
+  args: [--port=9898, --level=info, --data-path=/data]
+  env:
+    PODINFO_UI_MESSAGE: Deployed by Argo CD from platform-lab/apps/podinfo
+  replicas: 2
+  port: 9898
+  probes:
+    readiness: {path: /readyz, periodSeconds: 5}
+    liveness: {path: /healthz, periodSeconds: 10}
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 64Mi}
+  # The image's "app" user.
+  securityContext: {runAsUser: 100, runAsGroup: 101, fsGroup: 101}
+  writablePaths: [/tmp, /data]
