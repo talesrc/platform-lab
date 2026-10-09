@@ -9,7 +9,7 @@ metadata:
     backstage.io/kubernetes-namespace: app-hello
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=hello'
     argocd/app-name: hello
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
   links:
     - url: https://hello.apps.lab.localhost
       title: hello

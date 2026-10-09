@@ -41,7 +41,7 @@ metadata:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/terraform/platform-addons
     backstage.io/kubernetes-namespace: argocd
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=argocd'
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
   links:
     - url: https://argocd.lab.localhost
       title: Argo CD UI
@@ -62,7 +62,7 @@ metadata:
     backstage.io/kubernetes-namespace: envoy-gateway-system
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=envoy-gateway'
     argocd/app-name: envoy-gateway
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
 spec:
   type: platform-service
   lifecycle: production
@@ -80,7 +80,7 @@ metadata:
     backstage.io/kubernetes-namespace: envoy-gateway-system
     backstage.io/kubernetes-label-selector: 'gateway.envoyproxy.io/owning-gateway-name=platform'
     argocd/app-name: platform-gateway
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
 spec:
   type: platform-service
   lifecycle: production
@@ -101,7 +101,7 @@ metadata:
     backstage.io/kubernetes-namespace: cert-manager
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=cert-manager'
     argocd/app-name: cert-manager
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
 spec:
   type: platform-service
   lifecycle: production
@@ -119,7 +119,7 @@ metadata:
     backstage.io/kubernetes-namespace: kyverno
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=kyverno'
     argocd/app-name: kyverno
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
 spec:
   type: platform-service
   lifecycle: production
@@ -176,7 +176,7 @@ metadata:
     backstage.io/kubernetes-namespace: backstage
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/instance=backstage'
     argocd/app-name: backstage
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
   links:
     - url: https://backstage.lab.localhost
       title: Backstage
@@ -197,7 +197,7 @@ metadata:
     backstage.io/kubernetes-namespace: app-podinfo
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=podinfo'
     argocd/app-name: podinfo
-    grafana/dashboard-selector: "title @> 'Compute Resources / Namespace'"
+    grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
   links:
     - url: https://podinfo.apps.lab.localhost
       title: podinfo
