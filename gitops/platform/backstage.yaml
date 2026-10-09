@@ -25,12 +25,14 @@ spec:
             registry: ghcr.io
             repository: backstage/backstage
             tag: "1.55.2"
-          # The chart only appends the generated app-config; keep the image's own files first.
+          # The chart only appends the generated app-config; keep the image's base file first.
+          # Not app-config.production.yaml: it sets backend.listen as a string while
+          # app-config.yaml uses an object, which Backstage rejects ("Invalid type in config
+          # for key 'backend.listen'"). The appConfig below overrides everything else it sets
+          # (PostgreSQL, URLs, guest auth, demo catalog).
           args:
             - --config
             - app-config.yaml
-            - --config
-            - app-config.production.yaml
           podSecurityContext:
             runAsNonRoot: true
             runAsUser: 1000 # "node" in the image
