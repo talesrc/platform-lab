@@ -1,14 +1,3 @@
-# Envoy Gateway controller; the chart also installs the Gateway API CRDs.
-resource "helm_release" "envoy_gateway" {
-  name             = "eg"
-  repository       = "oci://docker.io/envoyproxy"
-  chart            = "gateway-helm"
-  version          = var.envoy_gateway.chart_version
-  namespace        = var.envoy_gateway.namespace
-  create_namespace = true
-  wait             = true
-}
-
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
@@ -26,6 +15,16 @@ resource "helm_release" "argocd" {
       params = {
         # TLS is terminated at the platform Gateway, not by argocd-server.
         "server.insecure" = true
+      }
+      repositories = {
+        # OCI Helm registry for charts that are only published as OCI artifacts
+        # (e.g. Envoy Gateway's gateway-helm).
+        envoyproxy = {
+          name      = "envoyproxy"
+          type      = "helm"
+          url       = "docker.io/envoyproxy"
+          enableOCI = "true"
+        }
       }
       cm = {
         # Report child Applications' health, so sync waves in the app-of-apps
@@ -80,5 +79,5 @@ resource "helm_release" "argocd_apps" {
     }
   })]
 
-  depends_on = [helm_release.argocd, helm_release.envoy_gateway]
+  depends_on = [helm_release.argocd]
 }

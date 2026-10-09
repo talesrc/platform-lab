@@ -1,9 +1,5 @@
 # cluster_state_path = "../kind-cluster/terraform.tfstate"
 
-envoy_gateway = {
-  chart_version = "v1.9.2"
-}
-
 argocd = {
   chart_version      = "10.10.2"
   apps_chart_version = "2.0.6"

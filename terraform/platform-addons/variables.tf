@@ -4,15 +4,6 @@ variable "cluster_state_path" {
   default     = "../kind-cluster/terraform.tfstate"
 }
 
-variable "envoy_gateway" {
-  description = "Envoy Gateway (Gateway API implementation) release settings."
-  type = object({
-    chart_version = optional(string, "v1.9.2")
-    namespace     = optional(string, "envoy-gateway-system")
-  })
-  default = {}
-}
-
 variable "argocd" {
   description = "Argo CD release settings."
   type = object({

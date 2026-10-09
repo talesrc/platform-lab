@@ -8,7 +8,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 | Path | Owner | What |
 |---|---|---|
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
-| `terraform/platform-addons` | Terraform | Bootstrap only: Envoy Gateway, Argo CD and the root app-of-apps |
+| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD and the root app-of-apps |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
 | `charts/platform-gateway` | Argo CD | Shared Gateway API entrypoint: GatewayClass, Gateway, TLS, HTTPRoutes |
@@ -16,7 +16,7 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 
 Sync waves under `gitops/platform`:
 
-1. `cert-manager` (wave -2)
+1. `cert-manager` and `envoy-gateway` (wave -2)
 2. `cert-manager-issuers` (wave -1): self-signed root → `platform-ca` ClusterIssuer
 3. `platform-gateway` (wave 0): wildcard `*.localtest.me` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
 
