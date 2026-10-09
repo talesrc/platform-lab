@@ -27,6 +27,8 @@ locals {
       "p, role:app-developer, applications, *, apps/*, allow",
       "p, role:app-developer, logs, get, apps/*, allow",
       "p, role:app-developer, projects, get, apps, allow",
+      # Backstage's Argo CD plugin (token from terraform/platform-access): read-only.
+      "g, backstage, role:readonly",
     ],
     [for subject in var.argocd_admins : "g, ${subject}, role:admin"],
     [for subject in var.argocd_app_developers : "g, ${subject}, role:app-developer"],
@@ -70,6 +72,8 @@ resource "helm_release" "argocd" {
         "policy.csv" = local.rbac_policy
       }
       cm = merge(concat(local.dex_config, [{
+        # Local account for Backstage's Argo CD plugin: API tokens only, no UI login.
+        "accounts.backstage" = "apiKey"
         # Report child Applications' health, so sync waves in the app-of-apps
         # wait for each wave to be Healthy before starting the next.
         "resource.customizations.health.argoproj.io_Application" = <<-LUA
