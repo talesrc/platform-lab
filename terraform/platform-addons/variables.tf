@@ -27,3 +27,30 @@ variable "gitops" {
   })
   default = {}
 }
+
+variable "github_oauth" {
+  description = <<-EOT
+    GitHub OAuth App for Argo CD login through Dex (a personal account is enough).
+    Callback URL: https://<argocd.hostname>/api/dex/callback. null = no GitHub login.
+    Without an org any GitHub user can authenticate, but RBAC gives them no access unless
+    they are listed below. Set it only in terraform.tfvars (gitignored), never in git.
+  EOT
+  type = object({
+    client_id     = string
+    client_secret = string
+  })
+  default   = null
+  sensitive = true
+}
+
+variable "argocd_admins" {
+  description = "GitHub emails or usernames granted role:admin in Argo CD (used with github_oauth)."
+  type        = list(string)
+  default     = ["tales.ribeirop@gmail.com"]
+}
+
+variable "argocd_app_developers" {
+  description = "GitHub emails or usernames granted role:app-developer (the `apps` project only)."
+  type        = list(string)
+  default     = []
+}

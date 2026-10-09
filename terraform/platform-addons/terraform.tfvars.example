@@ -8,6 +8,16 @@ argocd = {
   hostname           = "argocd.lab.localhost"
 }
 
+# GitHub login (optional). Create an OAuth App: GitHub > Settings > Developer settings >
+# OAuth Apps, with Homepage URL https://argocd.lab.localhost and Authorization callback URL
+# https://argocd.lab.localhost/api/dex/callback. Real values go only in terraform.tfvars.
+# github_oauth = {
+#   client_id     = "<client id>"
+#   client_secret = "<client secret>"
+# }
+# argocd_admins         = ["you@example.com"] # GitHub email or username
+# argocd_app_developers = []
+
 gitops = {
   repo_url        = "https://github.com/talesrc/platform-lab.git"
   target_revision = "main"
