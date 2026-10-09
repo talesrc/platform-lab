@@ -13,10 +13,10 @@ spec:
   source:
     repoURL: https://github.com/talesrc/platform-lab.git
     targetRevision: main
+    # Directory sources don't recurse by default, so tests/ (the `kyverno test`
+    # suite) is never applied. (`directory: {recurse: false}` would be dropped by
+    # the API server as a default and leave the root app OutOfSync.)
     path: gitops/manifests/kyverno-policies
-    directory:
-      # Only the policies at the top level; tests/ is the `kyverno test` suite.
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno

@@ -8,6 +8,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "-2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+    # Argo CD adds these itself because the chart has pre-delete hooks; declaring
+    # them keeps the root app from reporting this Application as OutOfSync.
+    - pre-delete-finalizer.argocd.argoproj.io
+    - pre-delete-finalizer.argocd.argoproj.io/cleanup
 spec:
   project: default
   source:
