@@ -27,6 +27,7 @@ hosts-file changes are needed. The certificates are signed by the lab's own CA; 
 - New to the platform? Read the [architecture](architecture.md).
 - Want to ship a service? Follow [Apps and the golden path](apps.md).
 - Running the lab yourself? See [Bring it up](bring-up.md).
+- What's next? See the [roadmap](roadmap.md).
 
 The source lives in [talesrc/platform-lab](https://github.com/talesrc/platform-lab); these pages
 are its `docs/` folder, rendered in Backstage on the `platform-lab` system's *Docs* tab.

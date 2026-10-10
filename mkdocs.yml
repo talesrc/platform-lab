@@ -16,6 +16,7 @@ nav:
   - Policies: policies.md
   - Observability: observability.md
   - CI and updates: ci.md
+  - Roadmap: roadmap.md
 
 plugins:
   - techdocs-core
