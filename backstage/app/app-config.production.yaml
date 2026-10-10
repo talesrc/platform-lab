@@ -81,6 +81,8 @@ catalog:
       target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
     - type: url
       target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/promote-app/template.yaml
+    - type: url
+      target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/rollback-app/template.yaml
 
 # --- Platform visibility (IDP phase 1) --------------------------------------------------
 # Tokens come from the backstage-platform-access Secret (terraform/platform-access); all
@@ -233,6 +235,22 @@ techInsights:
               - fact: hasLinks
                 operator: equal
                 value: true
+      prdNotBehindStg:
+        type: json-rules-engine
+        name: prd keeps up with stg
+        description: >-
+          prd runs stg's release, or stg's newer release is at most 14 days old. Promote it
+          (Create → Promote to prd) or, if it shouldn't reach prd, fix stg.
+        factIds: [platformLabFactRetriever]
+        filter:
+          kind: component
+          spec.type: service
+        rule:
+          conditions:
+            all:
+              - fact: prdBehindDays
+                operator: lessThanInclusive
+                value: 14
       onLatestGoldenPathChart:
         type: json-rules-engine
         name: On the latest golden-path chart
@@ -249,3 +267,12 @@ techInsights:
               - fact: usesLatestAppChart
                 operator: equal
                 value: true
+
+# --- Releases -----------------------------------------------------------------------------
+# platform-lab:app:promote (packages/backend/src/plugins/scaffolderPromote.ts) checks stg
+# before promoting: Synced, Healthy and on the release's image in Argo CD (argocd.* above),
+# deployed at least stgSoakMinutes ago, and no warning/critical alert firing in its namespace.
+platformLab:
+  promotion:
+    stgSoakMinutes: 10
+    alertmanagerUrl: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093

@@ -35,7 +35,19 @@ const files: Record<string, string> = {
     'apiVersion: v2\nname: hello\nversion: 1.0.0\ndependencies:\n  - name: app\n    version: 0.1.0\n',
   'https://github.com/talesrc/platform-lab/blob/main/charts/app/Chart.yaml':
     'apiVersion: v2\nname: app\nversion: 0.2.0\n',
+  'https://github.com/talesrc/platform-lab/blob/main/apps/hello/envs/stg/release.yaml':
+    '# stg\napp:\n  image:\n    tag: "1.1.0"\n',
+  'https://github.com/talesrc/platform-lab/blob/main/apps/hello/envs/prd/release.yaml':
+    'app:\n  image:\n    tag: "1.0.0"\n',
 };
+
+// stg's release changed 20 days ago (GitHub commits API).
+const lastChanged = jest.fn(async (..._args: unknown[]) =>
+  new Date(Date.now() - 20.5 * 86_400_000).toISOString(),
+);
+jest.mock('./releaseHistory', () => ({
+  GithubFileHistory: { fromConfig: () => ({ lastChanged }) },
+}));
 
 // The retriever builds its own CatalogClient; serve the entities from a mock.
 jest.mock('@backstage/catalog-client', () => ({
@@ -82,7 +94,16 @@ describe('platformLabFactRetriever', () => {
       appChartVersion: '0.1.0',
       latestAppChartVersion: '0.2.0',
       usesLatestAppChart: false,
+      stgReleaseTag: '1.1.0',
+      prdReleaseTag: '1.0.0',
+      prdMatchesStg: false,
+      prdBehindDays: 20,
     });
+    expect(lastChanged).toHaveBeenCalledWith(
+      'talesrc/platform-lab',
+      'apps/hello/envs/stg/release.yaml',
+      'main',
+    );
     expect(byName['registry-cache']).toEqual({
       hasKubernetesSelector: false,
       hasArgocdApp: false,
@@ -90,6 +111,8 @@ describe('platformLabFactRetriever', () => {
       hasLinks: false,
       isGoldenPathApp: false,
       usesLatestAppChart: true,
+      prdMatchesStg: true,
+      prdBehindDays: 0,
     });
   });
 });

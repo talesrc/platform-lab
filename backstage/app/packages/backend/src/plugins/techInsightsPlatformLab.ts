@@ -5,7 +5,10 @@
  * - live-state annotations (Kubernetes, Argo CD, Grafana) and links on the entity page
  * - golden-path apps (source under apps/<name>) on the newest version of the app chart:
  *   the `app` dependency in apps/<name>/Chart.yaml vs the version in charts/app/Chart.yaml
- *   on the same branch, both read through the GitHub integration (UrlReader).
+ *   on the same branch, both read through the GitHub integration (UrlReader);
+ * - what runs where: the release tag of stg and prd (envs/<env>/release.yaml), whether prd
+ *   runs stg's release, and for how many days it hasn't (since stg's release last changed,
+ *   from the GitHub API).
  *
  * Built-in retrievers (ownership, metadata, techdocs) cover the rest.
  */
@@ -19,6 +22,8 @@ import {
 } from '@backstage-community/plugin-tech-insights-node';
 import { DateTime } from 'luxon';
 import { parse as parseYaml } from 'yaml';
+import { GithubFileHistory } from './releaseHistory';
+import { sameRelease, type Values } from './releases';
 
 const SOURCE_LOCATION = 'backstage.io/source-location';
 // url:https://github.com/<owner>/<repo>/tree/<ref>/apps/<name>
@@ -33,13 +38,13 @@ type ChartYaml = {
   dependencies?: Array<{ name?: string; version?: string }>;
 };
 
-async function readChart(
+async function readYaml<T>(
   ctx: FactRetrieverContext,
   url: string,
-): Promise<ChartYaml | undefined> {
+): Promise<T | undefined> {
   try {
     const response = await ctx.urlReader.readUrl(url);
-    return parseYaml((await response.buffer()).toString('utf8')) as ChartYaml;
+    return (parseYaml((await response.buffer()).toString('utf8')) ?? {}) as T;
   } catch (error) {
     ctx.logger.warn(`Could not read ${url}: ${error}`);
     return undefined;
@@ -57,16 +62,39 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/** Whole days since `path` last changed on GitHub (0 if unknown). */
+async function daysBehind(
+  ctx: FactRetrieverContext,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<number> {
+  try {
+    const changed = await GithubFileHistory.fromConfig(ctx.config).lastChanged(
+      repo,
+      path,
+      ref,
+    );
+    return changed
+      ? Math.floor(DateTime.now().diff(DateTime.fromISO(changed), 'days').days)
+      : 0;
+  } catch (error) {
+    ctx.logger.warn(`Could not read the history of ${repo}/${path}: ${error}`);
+    return 0;
+  }
+}
+
 export const platformLabFactRetriever: FactRetriever = {
   id: 'platformLabFactRetriever',
-  version: '0.1.0',
+  version: '0.2.0',
   title: 'platform-lab',
   description: 'Live-state annotations, links and golden-path chart version',
   entityFilter: [{ kind: ['component'] }],
   schema: {
     hasKubernetesSelector: {
       type: 'boolean',
-      description: 'Has backstage.io/kubernetes-label-selector (pods on the entity page)',
+      description:
+        'Has backstage.io/kubernetes-label-selector (pods on the entity page)',
     },
     hasArgocdApp: {
       type: 'boolean',
@@ -75,7 +103,8 @@ export const platformLabFactRetriever: FactRetriever = {
     },
     hasGrafanaDashboards: {
       type: 'boolean',
-      description: 'Has grafana/dashboard-selector (dashboards on the entity page)',
+      description:
+        'Has grafana/dashboard-selector (dashboards on the entity page)',
     },
     hasLinks: {
       type: 'boolean',
@@ -83,7 +112,8 @@ export const platformLabFactRetriever: FactRetriever = {
     },
     isGoldenPathApp: {
       type: 'boolean',
-      description: 'Source lives under apps/<name> (deployed by the apps ApplicationSet)',
+      description:
+        'Source lives under apps/<name> (deployed by the apps ApplicationSet)',
     },
     usesLatestAppChart: {
       type: 'boolean',
@@ -97,6 +127,24 @@ export const platformLabFactRetriever: FactRetriever = {
     latestAppChartVersion: {
       type: 'string',
       description: 'Version of charts/app on the same branch',
+    },
+    stgReleaseTag: {
+      type: 'string',
+      description: 'Image tag of the release in envs/stg/release.yaml',
+    },
+    prdReleaseTag: {
+      type: 'string',
+      description: 'Image tag of the release in envs/prd/release.yaml',
+    },
+    prdMatchesStg: {
+      type: 'boolean',
+      description:
+        'prd runs the stg release (true when not a golden-path app with environments)',
+    },
+    prdBehindDays: {
+      type: 'integer',
+      description:
+        "Days since stg's release changed while prd still runs another one (0 when prd matches stg)",
     },
   },
   async handler(ctx) {
@@ -117,9 +165,10 @@ export const platformLabFactRetriever: FactRetriever = {
       if (!latestByRepo.has(key)) {
         latestByRepo.set(
           key,
-          readChart(ctx, `${repo}/blob/${ref}/charts/app/Chart.yaml`).then(
-            chart => chart?.version,
-          ),
+          readYaml<ChartYaml>(
+            ctx,
+            `${repo}/blob/${ref}/charts/app/Chart.yaml`,
+          ).then(chart => chart?.version),
         );
       }
       return latestByRepo.get(key)!;
@@ -127,15 +176,21 @@ export const platformLabFactRetriever: FactRetriever = {
 
     return Promise.all(
       items.map(async entity => {
-        const facts: Record<string, boolean | string> = {
-          hasKubernetesSelector: has(entity, 'backstage.io/kubernetes-label-selector'),
+        const facts: Record<string, boolean | string | number> = {
+          hasKubernetesSelector: has(
+            entity,
+            'backstage.io/kubernetes-label-selector',
+          ),
           // app-selector: golden-path apps, one Application per environment.
           hasArgocdApp:
-            has(entity, 'argocd/app-name') || has(entity, 'argocd/app-selector'),
+            has(entity, 'argocd/app-name') ||
+            has(entity, 'argocd/app-selector'),
           hasGrafanaDashboards: has(entity, 'grafana/dashboard-selector'),
           hasLinks: (entity.metadata.links ?? []).length > 0,
           isGoldenPathApp: false,
           usesLatestAppChart: true,
+          prdMatchesStg: true,
+          prdBehindDays: 0,
         };
 
         const match = GOLDEN_PATH_SOURCE.exec(
@@ -145,15 +200,41 @@ export const platformLabFactRetriever: FactRetriever = {
           const [, repo, ref, appDir] = match;
           facts.isGoldenPathApp = true;
           const [appChart, latest] = await Promise.all([
-            readChart(ctx, `${repo}/blob/${ref}/${appDir}/Chart.yaml`),
+            readYaml<ChartYaml>(
+              ctx,
+              `${repo}/blob/${ref}/${appDir}/Chart.yaml`,
+            ),
             latestChart(repo, ref),
           ]);
-          const pinned = appChart?.dependencies?.find(d => d.name === 'app')?.version;
+          const pinned = appChart?.dependencies?.find(
+            d => d.name === 'app',
+          )?.version;
           if (pinned) facts.appChartVersion = pinned;
           if (latest) facts.latestAppChartVersion = latest;
           // Unknown (unreadable) versions don't fail the check; a warning is logged.
           facts.usesLatestAppChart =
             !pinned || !latest || compareVersions(pinned, latest) >= 0;
+
+          const [stg, prd] = await Promise.all(
+            ['stg', 'prd'].map(env =>
+              readYaml<Values>(
+                ctx,
+                `${repo}/blob/${ref}/${appDir}/envs/${env}/release.yaml`,
+              ),
+            ),
+          );
+          if (stg?.app?.image?.tag) facts.stgReleaseTag = stg.app.image.tag;
+          if (prd?.app?.image?.tag) facts.prdReleaseTag = prd.app.image.tag;
+          // Unknown (unreadable) releases don't fail the check; a warning is logged.
+          if (stg && prd && !sameRelease(stg, prd)) {
+            facts.prdMatchesStg = false;
+            facts.prdBehindDays = await daysBehind(
+              ctx,
+              repo.replace('https://github.com/', ''),
+              `${appDir}/envs/stg/release.yaml`,
+              ref,
+            );
+          }
         }
 
         return {
