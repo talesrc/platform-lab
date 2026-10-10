@@ -24,6 +24,7 @@ Sync waves under `gitops/platform`:
 1. `cert-manager`, `envoy-gateway`, `kyverno`, `cloudnative-pg` and `external-secrets` (wave -2)
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
+   and `policy-reporter` (wave -1): Kyverno results for Backstage (see [Standards](#standards-scorecards-policy-results-permissions))
 4. `backstage` and `vault` (wave -1): developer portal (see [Developer portal](#developer-portal)); secret store (see [Secrets](#secrets-vault--external-secrets))
 5. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
 6. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenancy](#tenancy))
@@ -442,6 +443,57 @@ apps and the golden path, the portal, policies, observability and CI. Every app 
 
 Preview locally: `pip install mkdocs-techdocs-core==1.7.1 && mkdocs serve` (from the directory
 with the `mkdocs.yml`).
+
+## Standards (scorecards, policy results, permissions)
+
+Backstage makes "good" visible and keeps catalog changes with their owners.
+
+**Scorecards** ([Tech Insights](https://github.com/backstage/community-plugins/tree/main/workspaces/tech-insights)):
+every component gets a *Scorecards* tab and card. Fact retrievers collect facts into
+PostgreSQL; the checks are JSON rules in `app-config.production.yaml` (`techInsights`):
+
+| Check | Passes when | Applies to |
+|---|---|---|
+| Owned by a team | `spec.owner` is a Group | all entities |
+| Has a description | `metadata.description` is set | all entities |
+| Has docs | `backstage.io/techdocs-ref` is set | all entities |
+| Shows live state | Kubernetes and Argo CD annotations are set | `service` components |
+| Has links | `metadata.links` is not empty | components |
+| On the latest golden-path chart | `apps/<name>/Chart.yaml` depends on the newest `charts/app` version | golden-path apps |
+
+The last three use `platformLabFactRetriever` (`packages/backend/src/plugins/techInsightsPlatformLab.ts`),
+which reads both `Chart.yaml` files through the GitHub integration, hourly.
+
+**Kyverno results per entity**: [Policy Reporter](https://kyverno.github.io/policy-reporter/)
+(`gitops/platform/policy-reporter.yaml`, core API only) aggregates Kyverno's PolicyReports, and
+Backstage's Policy Reporter plugin shows them in a *Policy Reporter* tab. An entity needs:
+
+```yaml
+metadata:
+  annotations:
+    kyverno.io/resource-name: <name>   # the workload's name
+    kyverno.io/kind: Deployment
+    backstage.io/kubernetes-namespace: app-<name>
+spec:
+  dependsOn:
+    - resource:default/platform-lab-cluster   # carries kyverno.io/endpoint
+```
+
+The golden-path template adds these. (The Kubernetes plugin's `customResources` can't do this:
+Kyverno labels PolicyReports only with `app.kubernetes.io/managed-by`, not with the app's labels.)
+
+**Permissions** (`packages/backend/src/plugins/permissionPolicy.ts`, replaces allow-all):
+
+| Action | Who |
+|---|---|
+| Read the catalog, docs, live state, scorecards; run templates | every signed-in user |
+| Unregister/delete or refresh an entity | its owners, and `group:platform-team` |
+| Register/remove catalog locations | `group:platform-team` |
+
+Templates stay open to everyone: they only open a pull request, and the merge is the gate (CI,
+review, Kyverno, the `apps` AppProject). Service-to-service calls (fact retrievers, the
+Alertmanager webhook plugin) and the external access tokens (Argo CD Notifications,
+Alertmanager) use service principals, which the policy doesn't gate.
 
 ## Tear it down
 
