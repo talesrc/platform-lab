@@ -47,10 +47,15 @@ echo "::endgroup::"
 mapfile -t manifests < <(grep -rlE --include='*.yaml' --include='*.yml' --exclude-dir=tests '^kind:' "$ROOT/gitops" || true)
 
 echo "::group::kubeconform"
+# ClusterSecretStore is skipped: the CRDs-catalog schema for external-secrets.io/v1 has a
+# property literally named "additionalProperties" set to false (crd provider,
+# whitelist.rules.items), which kubeconform can't compile, so it reports "could not find
+# schema" for every ClusterSecretStore. The API server still validates it on apply.
 kubeconform \
   -strict \
   -summary \
   -output text \
+  -skip ClusterSecretStore \
   -kubernetes-version "$KUBERNETES_VERSION" \
   -schema-location default \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \

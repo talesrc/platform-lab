@@ -1,0 +1,59 @@
+# Backstage's Secrets, now owned by External Secrets: same names and keys as when Terraform
+# created them, so gitops/platform/backstage.yaml is unchanged. Values live in Vault under
+# secret/platform-lab/backstage/* (written by terraform/platform-access).
+#
+# Backstage reads them as environment variables at start-up: after a value changes,
+# platform-access restarts the deployment (terraform_data.backstage_restart).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backstage-github
+  namespace: backstage
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  target:
+    name: backstage-github
+    creationPolicy: Owner
+  dataFrom:
+    # GITHUB_TOKEN: fine-grained PAT for the scaffolder (opens the golden-path PRs).
+    - extract:
+        key: platform-lab/backstage/github
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backstage-github-oauth
+  namespace: backstage
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  target:
+    name: backstage-github-oauth
+    creationPolicy: Owner
+  dataFrom:
+    # AUTH_GITHUB_CLIENT_ID / AUTH_GITHUB_CLIENT_SECRET: GitHub sign-in OAuth App.
+    - extract:
+        key: platform-lab/backstage/github-oauth
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backstage-platform-access
+  namespace: backstage
+spec:
+  refreshInterval: 5m
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault
+  target:
+    name: backstage-platform-access
+    creationPolicy: Owner
+  dataFrom:
+    # ARGOCD_AUTH_TOKEN (read-only Argo CD account), GRAFANA_TOKEN (Viewer service account).
+    - extract:
+        key: platform-lab/backstage/platform-access

@@ -18,7 +18,8 @@
   },
   "kubernetes": {
     "managerFilePatterns": [
-      "/^apps/.+\\.ya?ml$/"
+      "/^apps/.+\\.ya?ml$/",
+      "/^gitops/manifests/.+\\.ya?ml$/"
     ]
   },
   "customManagers": [
