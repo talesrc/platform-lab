@@ -17,7 +17,7 @@ spec:
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
     chart: kube-prometheus-stack
-    targetRevision: 92.2.0
+    targetRevision: 92.3.0
     helm:
       valuesObject:
         # kind binds etcd, kube-scheduler, kube-controller-manager and kube-proxy
