@@ -1,0 +1,44 @@
+# Policy Reporter: aggregates Kyverno's PolicyReports and serves them over a REST API
+# (http://policy-reporter.policy-reporter.svc:8080), which Backstage's Policy Reporter plugin
+# reads to show policy results on each entity page. Core only: no UI, no notification targets.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: policy-reporter
+  namespace: argocd
+  annotations:
+    # After kyverno (wave -2), which owns the PolicyReport CRDs.
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kyverno.github.io/policy-reporter
+    chart: policy-reporter
+    targetRevision: 3.11.0
+    helm:
+      valuesObject:
+        # Not excluded from the lab policies: pinned tag, name label, non-root, read-only
+        # root filesystem, and the requests/limit below.
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: policy-reporter
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
