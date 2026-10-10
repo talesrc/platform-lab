@@ -1,0 +1,4 @@
+# Python packages for TechDocs' local generator (techdocs.generator.runIn: local), installed
+# into /opt/mkdocs in the image. mkdocs-techdocs-core pins mkdocs-material, pymdown-extensions
+# and the other plugins it needs; all are pure-Python wheels (no compiler required).
+mkdocs-techdocs-core==1.7.1

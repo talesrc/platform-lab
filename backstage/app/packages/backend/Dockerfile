@@ -49,14 +49,32 @@ COPY --from=build --chown=node:node /app/packages/backend/dist/skeleton/ ./
 RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid=1000 \
     yarn workspaces focus --all --production && rm -rf "$(yarn cache clean)"
 
+# TechDocs: mkdocs + mkdocs-techdocs-core in a venv, for the local generator
+# (techdocs.generator.runIn: local). Built here so pip and its caches stay out of runtime;
+# same base image, so the venv's /usr/bin/python3 matches the runtime's.
+FROM ${NODE_IMAGE} AS mkdocs
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-venv && \
+    rm -rf /var/lib/apt/lists/*
+COPY packages/backend/techdocs-requirements.txt /tmp/techdocs-requirements.txt
+RUN python3 -m venv /opt/mkdocs && \
+    /opt/mkdocs/bin/pip install --no-cache-dir --disable-pip-version-check \
+      -r /tmp/techdocs-requirements.txt && \
+    find /opt/mkdocs -name '__pycache__' -prune -exec rm -rf {} +
+
 # Stage 4: runtime. No compiler, no dev dependencies, no sources: production
 # node_modules + the backend bundle (which serves the built frontend) + config.
+# python3 is only there for the mkdocs venv (TechDocs).
 FROM ${NODE_IMAGE} AS runtime
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    apt-get install -y --no-install-recommends libsqlite3-0 && \
+    apt-get install -y --no-install-recommends libsqlite3-0 python3 && \
     rm -rf /var/lib/apt/lists/*
+COPY --from=mkdocs /opt/mkdocs /opt/mkdocs
+ENV PATH="/opt/mkdocs/bin:${PATH}"
 USER node
 WORKDIR /app
 ENV NODE_ENV=production

@@ -125,3 +125,18 @@ grafana:
       domain: https://grafana.lab.localhost
       proxyPath: /grafana/api
       unifiedAlerting: true
+
+# --- TechDocs (IDP phase 2) -------------------------------------------------------------
+# Docs-as-code: an entity with `backstage.io/techdocs-ref: dir:.` gets a Docs tab rendered
+# from the mkdocs.yml + docs/ next to its catalog-info.yaml. Backstage fetches the sources
+# from GitHub (integrations.github) and builds them with mkdocs-techdocs-core, installed in
+# the image (/opt/mkdocs, see packages/backend/Dockerfile) - no Docker-in-Docker.
+# The local publisher keeps generated sites on the pod's filesystem: they are rebuilt on
+# first view after a restart (fine for the lab; production would publish to object storage
+# with builder: external and generate the docs in CI).
+techdocs:
+  builder: local
+  generator:
+    runIn: local
+  publisher:
+    type: local
