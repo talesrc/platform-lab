@@ -1,0 +1,112 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: promote-app
+  title: Promote to prd
+  description: >-
+    Promotes a golden-path service's stg release (image tag and the env vars that belong to it)
+    to prd. Asks for prd's value of any env var the release requires, then opens a pull
+    request; merging it deploys the release to prd through Argo CD.
+  tags: [recommended, gitops, release]
+spec:
+  owner: group:platform-team
+  type: release
+  system: platform-lab
+
+  parameters:
+    - title: Release
+      required: [app]
+      properties:
+        app:
+          title: Service
+          type: string
+          description: >-
+            A golden-path service. Its envs/stg/release.yaml becomes envs/prd/release.yaml.
+            To open this form with a service already chosen, link to
+            /create/templates/default/promote-app?formData={"app":"component:default/<name>"}.
+          ui:field: EntityPicker
+          ui:options:
+            allowArbitraryValues: false
+            catalogFilter:
+              kind: Component
+              # Golden-path apps: one Argo CD Application per environment.
+              metadata.annotations.argocd/app-selector: { exists: true }
+        reason:
+          title: Why
+          type: string
+          description: Release notes, a ticket or a changelog link, for the pull request.
+          ui:widget: textarea
+        env:
+          title: Environment variables for prd
+          type: object
+          description: >-
+            Only for env vars the new release requires (requiredEnv) that prd doesn't set yet;
+            they go into envs/prd/values.yaml. The run stops and names any that are missing.
+          additionalProperties:
+            type: string
+
+  steps:
+    - id: fetch
+      name: Fetch the app
+      action: fetch:plain
+      input:
+        url: https://github.com/talesrc/platform-lab/tree/main/apps/${{ parameters.app | parseEntityRef | pick('name') }}
+        targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}
+
+    # backstage/app/packages/backend/src/plugins/scaffolderPromote.ts: copies the stg release,
+    # sets the env vars above and checks the release's requiredEnv against prd.
+    - id: promote
+      name: Promote the stg release
+      action: platform-lab:app:promote
+      input:
+        app: ${{ parameters.app | parseEntityRef | pick('name') }}
+        to: prd
+        env: ${{ parameters.env }}
+
+    - id: publish
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?owner=talesrc&repo=platform-lab
+        sourcePath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
+        targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
+        branchName: promote/${{ parameters.app | parseEntityRef | pick('name') }}-prd-${{ steps['promote'].output.tag }}
+        title: "chore(apps): promote ${{ parameters.app | parseEntityRef | pick('name') }} ${{ steps['promote'].output.tag }} to prd"
+        commitMessage: "chore(apps): promote ${{ parameters.app | parseEntityRef | pick('name') }} ${{ steps['promote'].output.tag }} to prd"
+        description: |
+          Promotes `${{ parameters.app | parseEntityRef | pick('name') }}` from stg to prd:
+          **${{ steps['promote'].output.previousTag }} → ${{ steps['promote'].output.tag }}**.
+
+          - `envs/prd/release.yaml` is now a copy of `envs/stg/release.yaml` (image tag and the
+            release's env vars move together).
+          - Environment config set in `envs/prd/values.yaml`: ${{ steps['promote'].output.envSet or 'none' }}.
+
+          ${{ parameters.reason or '' }}
+
+          CI checks that prd runs what stg runs and that prd sets every env var the release
+          requires. Merging deploys it to prd (namespace
+          `app-${{ parameters.app | parseEntityRef | pick('name') }}-prd`).
+
+          Requested by ${{ user.ref }} from Backstage.
+
+    - id: notify
+      name: Notify you
+      action: notification:send
+      input:
+        recipients: entity
+        entityRefs:
+          - ${{ user.ref }}
+        title: "${{ parameters.app | parseEntityRef | pick('name') }} ${{ steps['promote'].output.tag }} → prd: pull request ready for review"
+        info: Merge it to deploy the release to prd. Argo CD notifies the owner once it is live.
+        link: ${{ steps['publish'].output.remoteUrl }}
+        topic: deployments
+        # A notification failure must not fail a run whose pull request already exists.
+        optional: true
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps['publish'].output.remoteUrl }}
+      - title: Service
+        icon: catalog
+        entityRef: ${{ parameters.app }}

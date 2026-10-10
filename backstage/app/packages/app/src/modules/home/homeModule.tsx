@@ -11,8 +11,11 @@ described in the [catalog](/catalog) and deployed from git by Argo CD.
 
 1. **Create** — fill in the golden-path form. It renders the chart values for you.
 2. **Review and merge** the pull request it opens on \`talesrc/platform-lab\`.
-3. **Argo CD deploys it** to namespace \`app-<name>\`, live at
-   \`https://<name>.apps.lab.localhost\`, with Prometheus scraping and dashboards.
+3. **Argo CD deploys it** to stg and prd, live at
+   \`https://<name>-stg.apps.lab.localhost\` and \`https://<name>.apps.lab.localhost\`,
+   with Prometheus scraping and dashboards.
+
+New versions go to stg first; **Promote to prd** copies a release to prd.
 
 Each service page shows its pods, Argo CD sync status and Grafana dashboards.
 `;

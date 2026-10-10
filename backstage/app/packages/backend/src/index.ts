@@ -19,6 +19,8 @@ backend.add(import('@backstage/plugin-scaffolder-backend-module-github'));
 backend.add(
   import('@backstage/plugin-scaffolder-backend-module-notifications'),
 );
+// platform-lab:app:promote, for the "Promote to prd" template (src/plugins/scaffolderPromote.ts).
+backend.add(import('./plugins/scaffolderPromote'));
 
 // techdocs plugin
 backend.add(import('@backstage/plugin-techdocs-backend'));

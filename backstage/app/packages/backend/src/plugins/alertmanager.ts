@@ -5,9 +5,10 @@
  * POST /api/alertmanager/webhook takes Alertmanager's webhook payload
  * (https://prometheus.io/docs/alerting/latest/configuration/#webhook_config). Each alert
  * goes to the Components whose backstage.io/kubernetes-namespace annotation matches the
- * alert's `namespace` label (so app-hello reaches hello's owner, monitoring reaches
- * kube-prometheus-stack's owner); alerts without a namespace, or in a namespace no
- * Component claims, go to alertmanager.fallbackRecipient. Notification recipients for an
+ * alert's `namespace` label (monitoring reaches kube-prometheus-stack's owner). Golden-path
+ * apps run once per environment, in app-<name>-<env> (the apps ApplicationSet), so those
+ * namespaces reach Component <name> (app-hello-prd -> hello). Alerts without a namespace,
+ * or in a namespace no Component claims, go to alertmanager.fallbackRecipient. Notification recipients for an
  * entity are its owner's members, resolved by the notifications backend.
  *
  * Alertmanager authenticates with a static token (backend.auth.externalAccess, restricted
@@ -43,6 +44,14 @@ const firingSeverity: Record<string, NotificationSeverity> = {
   info: 'normal',
 };
 
+// Environments of the apps ApplicationSet (gitops/manifests/app-tenancy/applicationset.yaml).
+const TENANT_NAMESPACE = /^app-(.+)-(stg|prd)$/;
+
+/** The golden-path app deployed in a namespace (app-hello-prd -> hello), if any. */
+export function tenantOf(namespace: string): string | undefined {
+  return TENANT_NAMESPACE.exec(namespace)?.[1];
+}
+
 export default createBackendPlugin({
   pluginId: 'alertmanager',
   register(env) {
@@ -73,12 +82,17 @@ export default createBackendPlugin({
           if (!namespace) {
             return [fallbackRecipient];
           }
+          const tenant = tenantOf(namespace);
           const { items } = await catalog.getEntities(
             {
               filter: {
                 kind: 'Component',
-                'metadata.annotations.backstage.io/kubernetes-namespace':
-                  namespace,
+                ...(tenant
+                  ? { 'metadata.name': tenant }
+                  : {
+                      'metadata.annotations.backstage.io/kubernetes-namespace':
+                        namespace,
+                    }),
               },
               fields: ['kind', 'metadata.namespace', 'metadata.name'],
             },

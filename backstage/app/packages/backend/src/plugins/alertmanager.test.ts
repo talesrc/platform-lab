@@ -6,15 +6,17 @@ import { createServiceFactory } from '@backstage/backend-plugin-api';
 import { catalogServiceMock } from '@backstage/plugin-catalog-node/testUtils';
 import { notificationService } from '@backstage/plugin-notifications-node';
 import request from 'supertest';
-import alertmanagerPlugin from './alertmanager';
+import alertmanagerPlugin, { tenantOf } from './alertmanager';
 
-const component = (name: string, namespace: string) => ({
+const component = (name: string, namespace?: string) => ({
   apiVersion: 'backstage.io/v1alpha1',
   kind: 'Component',
   metadata: {
     name,
     namespace: 'default',
-    annotations: { 'backstage.io/kubernetes-namespace': namespace },
+    annotations: namespace
+      ? { 'backstage.io/kubernetes-namespace': namespace }
+      : ({} as Record<string, string>),
   },
   spec: { type: 'service', owner: 'group:default/platform-team' },
 });
@@ -29,6 +31,15 @@ const alert = (
   fingerprint: `fp-${labels.alertname}`,
 });
 
+describe('tenantOf', () => {
+  it('maps app-<name>-<env> namespaces to the golden-path app', () => {
+    expect(tenantOf('app-hello-prd')).toBe('hello');
+    expect(tenantOf('app-my-api-stg')).toBe('my-api');
+    expect(tenantOf('app-hello')).toBeUndefined();
+    expect(tenantOf('monitoring')).toBeUndefined();
+  });
+});
+
 describe('alertmanager webhook', () => {
   const send = jest.fn();
 
@@ -38,7 +49,8 @@ describe('alertmanager webhook', () => {
         alertmanagerPlugin,
         catalogServiceMock.factory({
           entities: [
-            component('hello', 'app-hello'),
+            // Golden-path app: no namespace annotation, it runs in app-hello-<env>.
+            component('hello'),
             component('envoy-gateway', 'envoy-gateway-system'),
             component('platform-gateway', 'envoy-gateway-system'),
           ],
@@ -66,7 +78,7 @@ describe('alertmanager webhook', () => {
         alerts: [
           alert('firing', {
             alertname: 'KubePodCrashLooping',
-            namespace: 'app-hello',
+            namespace: 'app-hello-prd',
             severity: 'warning',
           }),
           alert('resolved', {
@@ -83,7 +95,7 @@ describe('alertmanager webhook', () => {
     expect(send.mock.calls[0][0]).toEqual({
       recipients: { type: 'entity', entityRef: ['component:default/hello'] },
       payload: expect.objectContaining({
-        title: 'KubePodCrashLooping firing in app-hello',
+        title: 'KubePodCrashLooping firing in app-hello-prd',
         description: 'KubePodCrashLooping summary',
         severity: 'high',
         scope: 'alertmanager:fp-KubePodCrashLooping',
@@ -126,7 +138,9 @@ describe('alertmanager webhook', () => {
       .post('/api/alertmanager/webhook')
       .set('Authorization', mockCredentials.service.header())
       .send({
-        alerts: [alert('firing', { alertname: 'X', namespace: 'app-hello' })],
+        alerts: [
+          alert('firing', { alertname: 'X', namespace: 'app-hello-stg' }),
+        ],
       });
 
     expect(res.status).toBe(500);

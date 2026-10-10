@@ -70,7 +70,8 @@ export const platformLabFactRetriever: FactRetriever = {
     },
     hasArgocdApp: {
       type: 'boolean',
-      description: 'Has argocd/app-name (sync status and history on the entity page)',
+      description:
+        'Has argocd/app-name or argocd/app-selector (sync status and history on the entity page)',
     },
     hasGrafanaDashboards: {
       type: 'boolean',
@@ -128,7 +129,9 @@ export const platformLabFactRetriever: FactRetriever = {
       items.map(async entity => {
         const facts: Record<string, boolean | string> = {
           hasKubernetesSelector: has(entity, 'backstage.io/kubernetes-label-selector'),
-          hasArgocdApp: has(entity, 'argocd/app-name'),
+          // app-selector: golden-path apps, one Application per environment.
+          hasArgocdApp:
+            has(entity, 'argocd/app-name') || has(entity, 'argocd/app-selector'),
           hasGrafanaDashboards: has(entity, 'grafana/dashboard-selector'),
           hasLinks: (entity.metadata.links ?? []).length > 0,
           isGoldenPathApp: false,

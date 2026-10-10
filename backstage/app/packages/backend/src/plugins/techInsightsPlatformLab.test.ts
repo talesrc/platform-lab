@@ -12,7 +12,7 @@ const mockEntities = [
         'backstage.io/source-location':
           'url:https://github.com/talesrc/platform-lab/tree/main/apps/hello',
         'backstage.io/kubernetes-label-selector': 'app.kubernetes.io/name=hello',
-        'argocd/app-name': 'hello',
+        'argocd/app-selector': 'platform-lab/tenant=hello',
       },
       links: [{ url: 'https://hello.apps.lab.localhost' }],
     },

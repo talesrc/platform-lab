@@ -79,6 +79,8 @@ catalog:
       target: https://github.com/talesrc/platform-lab/blob/main/catalog-info.yaml
     - type: url
       target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/golden-path-service/template.yaml
+    - type: url
+      target: https://github.com/talesrc/platform-lab/blob/main/backstage/templates/promote-app/template.yaml
 
 # --- Platform visibility (IDP phase 1) --------------------------------------------------
 # Tokens come from the backstage-platform-access Secret (terraform/platform-access); all
@@ -204,8 +206,9 @@ techInsights:
         type: json-rules-engine
         name: Shows live state
         description: >-
-          Kubernetes (backstage.io/kubernetes-label-selector) and Argo CD (argocd/app-name)
-          annotations, so the entity page shows its pods and sync status.
+          Kubernetes (backstage.io/kubernetes-label-selector) and Argo CD (argocd/app-name, or
+          argocd/app-selector for an app in several environments) annotations, so the entity
+          page shows its pods and sync status.
         factIds: [platformLabFactRetriever]
         filter:
           kind: component
