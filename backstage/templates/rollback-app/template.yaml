@@ -1,0 +1,112 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: rollback-app
+  title: Roll back prd
+  description: >-
+    Puts a golden-path service's prd back on the release it ran before (the previous version
+    of envs/prd/release.yaml in git), then opens a pull request; merging it deploys that
+    release to prd through Argo CD. stg is left alone.
+  tags: [gitops, release]
+spec:
+  owner: group:platform-team
+  type: release
+  system: platform-lab
+
+  parameters:
+    - title: Rollback
+      required: [app, reason]
+      properties:
+        app:
+          title: Service
+          type: string
+          description: >-
+            A golden-path service. Its envs/prd/release.yaml goes back to the previous release
+            prd ran.
+          ui:field: EntityPicker
+          ui:options:
+            allowArbitraryValues: false
+            catalogFilter:
+              kind: Component
+              # Golden-path apps: one Argo CD Application per environment.
+              metadata.annotations.argocd/app-selector: { exists: true }
+        reason:
+          title: Why
+          type: string
+          description: What went wrong (an incident, an alert, a ticket), for the pull request.
+          ui:widget: textarea
+        env:
+          title: Environment variables for prd
+          type: object
+          description: >-
+            Only if the previous release requires (requiredEnv) an env var prd no longer sets;
+            the run stops and names any that are missing. Nothing is removed from prd.
+          additionalProperties:
+            type: string
+
+  steps:
+    - id: fetch
+      name: Fetch the app
+      action: fetch:plain
+      input:
+        url: https://github.com/talesrc/platform-lab/tree/main/apps/${{ parameters.app | parseEntityRef | pick('name') }}
+        targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}
+
+    # backstage/app/packages/backend/src/plugins/scaffolderPromote.ts: finds the previous
+    # release in the git history of envs/prd/release.yaml and restores it.
+    - id: rollback
+      name: Restore the previous prd release
+      action: platform-lab:app:rollback
+      input:
+        app: ${{ parameters.app | parseEntityRef | pick('name') }}
+        repo: talesrc/platform-lab
+        env: ${{ parameters.env }}
+
+    - id: publish
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?owner=talesrc&repo=platform-lab
+        sourcePath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
+        targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
+        branchName: ${{ steps['rollback'].output.branchName }}
+        title: "fix(apps): roll back ${{ parameters.app | parseEntityRef | pick('name') }} in prd to ${{ steps['rollback'].output.tag }}"
+        commitMessage: "fix(apps): roll back ${{ parameters.app | parseEntityRef | pick('name') }} in prd to ${{ steps['rollback'].output.tag }}"
+        description: |
+          Rolls `${{ parameters.app | parseEntityRef | pick('name') }}` back in prd:
+          **${{ steps['rollback'].output.previousTag }} → ${{ steps['rollback'].output.tag }}**.
+
+          `envs/prd/release.yaml` is restored to its version from
+          ${{ steps['rollback'].output.commit }} (${{ steps['rollback'].output.deployedSince }}),
+          the release prd ran before. Environment config set in `envs/prd/values.yaml`:
+          ${{ steps['rollback'].output.envSet or 'none' }}.
+
+          ${{ parameters.reason }}
+
+          stg keeps its release, so prd is now behind stg: fix the release in stg, then promote
+          again. CI accepts this prd release because prd ran it before.
+
+          Requested by ${{ user.ref }} from Backstage.
+
+    - id: notify
+      name: Notify you
+      action: notification:send
+      input:
+        recipients: entity
+        entityRefs:
+          - ${{ user.ref }}
+        title: "${{ parameters.app | parseEntityRef | pick('name') }} prd → ${{ steps['rollback'].output.tag }}: rollback ready for review"
+        info: Merge it to roll prd back. Argo CD notifies the owner once it is live.
+        link: ${{ steps['publish'].output.remoteUrl }}
+        severity: high
+        topic: deployments
+        # A notification failure must not fail a run whose pull request already exists.
+        optional: true
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps['publish'].output.remoteUrl }}
+      - title: Service
+        icon: catalog
+        entityRef: ${{ parameters.app }}

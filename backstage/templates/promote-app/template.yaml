@@ -5,8 +5,9 @@ metadata:
   title: Promote to prd
   description: >-
     Promotes a golden-path service's stg release (image tag and the env vars that belong to it)
-    to prd. Asks for prd's value of any env var the release requires, then opens a pull
-    request; merging it deploys the release to prd through Argo CD.
+    to prd, once stg runs it well (Synced, Healthy, soaked, no alerts). Asks for prd's value
+    of any env var the release requires, removes the ones it no longer needs, then opens a
+    pull request; merging it deploys the release to prd through Argo CD.
   tags: [recommended, gitops, release]
 spec:
   owner: group:platform-team
@@ -42,6 +43,7 @@ spec:
           description: >-
             Only for env vars the new release requires (requiredEnv) that prd doesn't set yet;
             they go into envs/prd/values.yaml. The run stops and names any that are missing.
+            Env vars the new release no longer requires are removed from prd automatically.
           additionalProperties:
             type: string
 
@@ -53,10 +55,11 @@ spec:
         url: https://github.com/talesrc/platform-lab/tree/main/apps/${{ parameters.app | parseEntityRef | pick('name') }}
         targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}
 
-    # backstage/app/packages/backend/src/plugins/scaffolderPromote.ts: copies the stg release,
-    # sets the env vars above and checks the release's requiredEnv against prd.
+    # backstage/app/packages/backend/src/plugins/scaffolderPromote.ts: checks that stg runs
+    # the release well (Argo CD, Alertmanager), copies the stg release, sets the env vars
+    # above, removes the ones it no longer needs and checks its requiredEnv against prd.
     - id: promote
-      name: Promote the stg release
+      name: Check stg and promote its release
       action: platform-lab:app:promote
       input:
         app: ${{ parameters.app | parseEntityRef | pick('name') }}
@@ -70,7 +73,7 @@ spec:
         repoUrl: github.com?owner=talesrc&repo=platform-lab
         sourcePath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
         targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}/envs/prd
-        branchName: promote/${{ parameters.app | parseEntityRef | pick('name') }}-prd-${{ steps['promote'].output.tag }}
+        branchName: ${{ steps['promote'].output.branchName }}
         title: "chore(apps): promote ${{ parameters.app | parseEntityRef | pick('name') }} ${{ steps['promote'].output.tag }} to prd"
         commitMessage: "chore(apps): promote ${{ parameters.app | parseEntityRef | pick('name') }} ${{ steps['promote'].output.tag }} to prd"
         description: |
@@ -80,6 +83,10 @@ spec:
           - `envs/prd/release.yaml` is now a copy of `envs/stg/release.yaml` (image tag and the
             release's env vars move together).
           - Environment config set in `envs/prd/values.yaml`: ${{ steps['promote'].output.envSet or 'none' }}.
+          - Removed from `envs/prd/values.yaml` (no longer required by the release, or now set
+            by it): ${{ steps['promote'].output.envRemoved or 'none' }}.
+          - stg was Synced, Healthy and on this release's image in Argo CD, past its soak time,
+            with no warning or critical alert firing.
 
           ${{ parameters.reason or '' }}
 

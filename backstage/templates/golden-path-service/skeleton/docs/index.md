@@ -31,12 +31,14 @@ CI checks every pull request against the platform policies before it can merge.
 
 1. Open a pull request that changes `envs/stg/release.yaml` (new tag, and any new env vars:
    release-scoped ones in `app.env`, environment-specific ones listed in `requiredEnv` and set
-   in each `envs/<env>/values.yaml`).
-2. Once it runs well in stg, use **Create → Promote to prd** in Backstage. It copies the stg
-   release to prd, asks for prd's value of any env var the release requires, and opens the
-   pull request.
-3. CI only lets `envs/prd/release.yaml` change to what stg runs. For a hotfix, change both
-   files in the same pull request.
+   in each `envs/<env>/values.yaml`). Renovate opens these for new image versions on its own.
+2. Once it runs well in stg, use **Promote stg to prd** on the *Releases* card of this
+   service's page. It checks that stg is Synced, Healthy and quiet, copies the stg release to
+   prd, asks for prd's value of any env var the release requires, removes the ones it no
+   longer needs, and opens the pull request.
+3. If prd misbehaves, **Roll back prd** on the same card restores the release prd ran before.
+4. CI only lets `envs/prd/release.yaml` change to what stg runs, or to a release prd ran
+   before. For a hotfix, change both files in the same pull request.
 
 ## Operating it
 

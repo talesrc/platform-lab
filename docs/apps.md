@@ -49,12 +49,27 @@ Environment config, which differs between stg and prd (a database host, a partne
 replicas), stays in `envs/<env>/values.yaml` and is never promoted.
 
 1. **Release to stg:** a pull request changes `envs/stg/release.yaml`, and sets any new required
-   env var in `envs/stg/values.yaml`.
-2. **Promote to prd:** in Backstage, **Create → Promote to prd** (or the *Promote stg to prd*
-   link on the service's page). It copies `envs/stg/release.yaml` to `envs/prd/release.yaml`,
-   asks for prd's value of any required env var prd doesn't set yet (and stops, naming them, if
-   one is missing), and opens the pull request.
+   env var in `envs/stg/values.yaml`. New image versions come on their own: Renovate watches the
+   tag in every `envs/stg/release.yaml` (the `# renovate:` comment above it) and opens the pull
+   request, merging minor and patch versions once CI passes. It never touches prd.
+2. **Promote to prd:** in Backstage, **Create → Promote to prd** (or *Promote stg to prd* on the
+   service's *Releases* card). First it checks that stg runs the release well: in Argo CD,
+   `<name>-stg` is Synced, Healthy and on the release's image, and was deployed at least 10
+   minutes ago (`platformLab.promotion.stgSoakMinutes`); in Alertmanager, no warning or
+   critical alert is firing in `app-<name>-stg`. Then it copies `envs/stg/release.yaml` to
+   `envs/prd/release.yaml`, asks for prd's value of any required env var prd doesn't set yet
+   (and stops, naming them, if one is missing), removes from `envs/prd/values.yaml` the env
+   vars the new release no longer requires (or now sets itself), and opens the pull request.
 3. **Merge:** Argo CD deploys prd and notifies the owner.
+
+**Rolling back:** **Create → Roll back prd** (or *Roll back prd* on the *Releases* card) puts
+prd back on the release it ran before, taken from the git history of `envs/prd/release.yaml`,
+and opens the pull request. It leaves stg and prd's environment config alone; fix the release
+in stg, then promote again.
+
+**What runs where:** the *Releases* card on a service's page shows, per environment, the image
+Argo CD runs, its sync and health, and when it was last deployed. The *prd keeps up with stg*
+scorecard check fails when stg has had a different release for more than 14 days.
 
 CI (`scripts/ci/check-app-envs.py`) enforces the same rules on every pull request, however it
 was written:
@@ -64,7 +79,8 @@ was written:
 | `release.yaml` holds only `app.image.tag`, `app.env`, `requiredEnv` | anything else is environment config and must not travel with promotion |
 | an env var is in a release or in environment config, not both | otherwise it's unclear which wins after a promotion |
 | every `requiredEnv` name is set in that environment | prd can't start a version whose config is missing |
-| a changed `envs/prd/release.yaml` equals `envs/stg/release.yaml` | prd only runs what ran in stg; a hotfix changes both files in one pull request |
+| a changed `envs/prd/release.yaml` equals `envs/stg/release.yaml`, or a release prd ran before | prd only runs what ran in stg (or a rollback); a hotfix changes both files in one pull request |
+| a `# renovate:` comment names the app's image repository | Renovate would otherwise bump the tag from another image |
 
 Good practice for teams: give new settings sensible defaults in the code, so most new versions
 need no new config and promotion is just the tag.

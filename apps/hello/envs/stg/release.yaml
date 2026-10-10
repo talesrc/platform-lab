@@ -3,6 +3,8 @@
 # Only app.image.tag, app.env and requiredEnv are allowed (scripts/ci/check-app-envs.py).
 app:
   image:
+    # Renovate bumps this in stg only (renovate.json); prd gets it by promotion.
+    # renovate: datasource=docker depName=ghcr.io/stefanprodan/podinfo
     tag: "6.15.0"
   # Env vars that belong to this version and are the same in every environment.
   env:

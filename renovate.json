@@ -43,6 +43,16 @@
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*[A-Z_]+:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
       ]
+    },
+    {
+      "description": "Golden-path app releases: the image tag in apps/<name>/envs/stg/release.yaml only (prd changes by promotion), marked with a '# renovate:' comment",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^apps/[^/]+/envs/stg/release\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*tag:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+      ]
     }
   ],
   "packageRules": [
@@ -129,6 +139,31 @@
       ],
       "additionalBranchPrefix": "{{parentDir}}-",
       "commitMessageSuffix": "in {{parentDir}}"
+    },
+    {
+      "description": "Golden-path app releases go to stg on their own (minor/patch automerge once CI passes); prd only by promotion. Majors wait for review.",
+      "matchFileNames": [
+        "apps/*/envs/stg/release.yaml"
+      ],
+      "semanticCommitType": "feat",
+      "semanticCommitScope": "apps",
+      "commitMessageSuffix": "in {{packageFileDir}}",
+      "additionalBranchPrefix": "{{packageFileDir}}-",
+      "labels": [
+        "dependencies",
+        "release"
+      ]
+    },
+    {
+      "description": "Automerge minor/patch stg releases",
+      "matchFileNames": [
+        "apps/*/envs/stg/release.yaml"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true
     }
   ]
 }
