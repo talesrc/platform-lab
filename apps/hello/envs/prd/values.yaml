@@ -1,2 +1,4 @@
 # hello in prd: environment config only (never promoted). The release is in release.yaml.
-app: {}
+app:
+  env:
+    PODINFO_UI_MESSAGE: hello (prd)
