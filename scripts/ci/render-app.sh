@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Render one app under apps/<name>/ to stdout, the way Argo CD does.
-#   render-app.sh <app-dir> [pinned|local]
+#   render-app.sh <app-dir> [pinned|local] [env]
 # Helm apps (Chart.yaml): `pinned` uses the dependency version from Chart.yaml (published
 # chart); `local` swaps it for the working copy of charts/app, so chart changes are tested
-# against every app before they are published. Kustomize apps ignore the mode.
+# against every app before they are published. With an env, it adds envs/<env>/values.yaml
+# and envs/<env>/release.yaml and renders into app-<name>-<env>, like the apps
+# ApplicationSet. Kustomize apps ignore the mode and the env.
 set -euo pipefail
 
 app="${1%/}"
 mode="${2:-pinned}"
+env="${3:-}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name="$(basename "$app")"
 
@@ -31,7 +34,12 @@ PY
     rm -f "$work/Chart.lock"
   fi
   helm dependency build "$work" >/dev/null
-  helm template "$name" "$work" --namespace "app-$name"
+  if [ -n "$env" ]; then
+    helm template "$name" "$work" --namespace "app-$name-$env" \
+      --values "$work/envs/$env/values.yaml" --values "$work/envs/$env/release.yaml"
+  else
+    helm template "$name" "$work" --namespace "app-$name"
+  fi
 elif [ -f "$app/kustomization.yaml" ]; then
   kubectl kustomize "$app"
 else

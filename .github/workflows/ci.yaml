@@ -102,6 +102,24 @@ jobs:
       - name: Golden path (every apps/* passes all lab policies)
         run: scripts/ci/check-app-policies.sh
 
+  environments:
+    name: App environments (stg → prd)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base commit, to tell which release.yaml files a pull request changes.
+          fetch-depth: 0
+      - name: Install PyYAML
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/venv"
+          "${RUNNER_TEMP}/venv/bin/pip" install --quiet "pyyaml==${PYYAML_VERSION}"
+          echo "${RUNNER_TEMP}/venv/bin" >> "${GITHUB_PATH}"
+      - name: Releases, required env vars and promotion order
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/ci/check-app-envs.py ${BASE_SHA:+--base "${BASE_SHA}"}
+
   commitlint:
     name: Conventional Commits
     if: github.event_name == 'pull_request'

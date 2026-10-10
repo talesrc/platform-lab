@@ -27,13 +27,20 @@ echo "::group::helm template"
 python3 "$ROOT/scripts/ci/render-charts.py" "$OUT/rendered"
 echo "::endgroup::"
 
-echo "::group::render apps (pinned chart + local charts/app)"
+echo "::group::render apps per environment (pinned chart + local charts/app)"
 for app in "$ROOT"/apps/*/; do
   [ -f "$app/Chart.yaml" ] || [ -f "$app/kustomization.yaml" ] || continue
   name="$(basename "$app")"
-  for mode in pinned local; do
-    "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" > "$OUT/rendered/app-$name-$mode.yaml"
-    echo "rendered apps/$name ($mode) -> rendered/app-$name-$mode.yaml"
+  # Every environment (envs/<env>/), or the app alone if it has none (e.g. Kustomize).
+  envs=()
+  for dir in "$app"envs/*/; do [ -d "$dir" ] && envs+=("$(basename "$dir")"); done
+  [ "${#envs[@]}" -gt 0 ] || envs=("")
+  for env in "${envs[@]}"; do
+    for mode in pinned local; do
+      label="$name${env:+-$env}-$mode"
+      "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" "$env" > "$OUT/rendered/app-$label.yaml"
+      echo "rendered apps/$name ${env:+$env }($mode) -> rendered/app-$label.yaml"
+    done
   done
 done
 for values in "$ROOT"/charts/app/ci/*-values.yaml; do

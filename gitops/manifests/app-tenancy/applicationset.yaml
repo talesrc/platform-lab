@@ -1,5 +1,8 @@
-# One Application per directory under apps/: apps/<name>/ (Kustomize) is deployed to
-# namespace app-<name> under the restricted `apps` project.
+# One Application per app and environment: apps/<name>/ (a golden-path Helm app) is deployed
+# once per environment as <name>-<env>, into namespace app-<name>-<env>, under the restricted
+# `apps` project. Each environment renders the shared values.yaml plus
+# envs/<env>/values.yaml (environment config) and envs/<env>/release.yaml (the release, which
+# promotion copies from stg to prd).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -9,13 +12,22 @@ spec:
   goTemplate: true
   goTemplateOptions: ["missingkey=error"]
   generators:
-    - git:
-        repoURL: https://github.com/talesrc/platform-lab.git
-        revision: main
-        directories:
-          - path: apps/*
-  # Default policy (sync): removing apps/<name>/ deletes its Application and, through the
-  # resources finalizer below, its resources, so git stays the source of truth. If git can't
+    - matrix:
+        generators:
+          # The environments, in promotion order. hostSuffix: prd keeps <name>.apps.lab.localhost.
+          - list:
+              elements:
+                - env: stg
+                  hostSuffix: "-stg"
+                - env: prd
+                  hostSuffix: ""
+          - git:
+              repoURL: https://github.com/talesrc/platform-lab.git
+              revision: main
+              directories:
+                - path: apps/*
+  # Default policy (sync): removing apps/<name>/ deletes its Applications and, through the
+  # resources finalizer below, their resources, so git stays the source of truth. If git can't
   # be read, the generator errors and existing Applications are left untouched.
   # preserveResourcesOnDeletion: false = deleting this ApplicationSet also removes the
   # tenants' resources (fine for a lab; set true to keep workloads running).
@@ -23,10 +35,12 @@ spec:
     preserveResourcesOnDeletion: false
   template:
     metadata:
-      name: "{{ .path.basename }}"
+      name: "{{ .path.basename }}-{{ .env }}"
       labels:
         app.kubernetes.io/part-of: apps
+        # The catalog Component (Argo CD Notifications and Backstage find the app by these).
         platform-lab/tenant: "{{ .path.basename }}"
+        platform-lab/environment: "{{ .env }}"
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:
@@ -35,9 +49,20 @@ spec:
         repoURL: https://github.com/talesrc/platform-lab.git
         targetRevision: main
         path: "{{ .path.path }}"
+        helm:
+          # Same resource names (and app.kubernetes.io/name) in every environment.
+          releaseName: "{{ .path.basename }}"
+          valueFiles:
+            - envs/{{ .env }}/values.yaml
+            - envs/{{ .env }}/release.yaml
+          # Platform conventions per environment, not left to the app's values.
+          valuesObject:
+            app:
+              route:
+                hostname: "{{ .path.basename }}{{ .hostSuffix }}.apps.lab.localhost"
       destination:
         server: https://kubernetes.default.svc
-        namespace: "app-{{ .path.basename }}"
+        namespace: "app-{{ .path.basename }}-{{ .env }}"
       syncPolicy:
         automated:
           prune: true
@@ -48,6 +73,7 @@ spec:
           labels:
             app.kubernetes.io/part-of: apps
             platform-lab/tenant: "{{ .path.basename }}"
+            platform-lab/environment: "{{ .env }}"
         retry:
           limit: 10
           backoff:

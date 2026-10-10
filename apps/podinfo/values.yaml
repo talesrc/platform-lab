@@ -1,15 +1,13 @@
-# Values for the golden-path chart (charts/app/values.yaml documents every option).
+# Values for the golden-path chart (charts/app/values.yaml documents every option), shared by
+# every environment. envs/<env>/values.yaml holds the environment config, envs/<env>/release.yaml
+# the release (image tag and its env vars), promoted from stg to prd as one unit.
 # Golden-path reference app: https://podinfo.apps.lab.localhost
 app:
   image:
     repository: ghcr.io/stefanprodan/podinfo
-    tag: "6.15.0"
   # podinfo's binary is the image CMD (no ENTRYPOINT): args alone would replace it.
   command: [./podinfo]
   args: [--port=9898, --level=info, --data-path=/data]
-  env:
-    PODINFO_UI_MESSAGE: Deployed by Argo CD from platform-lab/apps/podinfo
-  replicas: 2
   port: 9898
   probes:
     readiness: {path: /readyz, periodSeconds: 5}

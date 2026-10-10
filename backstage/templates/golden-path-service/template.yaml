@@ -4,9 +4,10 @@ metadata:
   name: golden-path-service
   title: Golden-path service
   description: >-
-    A containerized HTTP service on the platform: Deployment, Service, HTTPS route at
-    <name>.apps.lab.localhost and Prometheus scraping. Opens a pull request to
-    platform-lab; merging it deploys the service through Argo CD.
+    A containerized HTTP service on the platform, in stg and prd: Deployment, Service, HTTPS
+    route at <name>.apps.lab.localhost (prd) and <name>-stg.apps.lab.localhost (stg) and
+    Prometheus scraping. Opens a pull request to platform-lab; merging it deploys the service
+    to both environments through Argo CD.
   tags: [recommended, kubernetes, gitops]
 spec:
   owner: group:platform-team
@@ -20,7 +21,7 @@ spec:
         name:
           title: Name
           type: string
-          description: DNS label; becomes apps/<name>, namespace app-<name> and <name>.apps.lab.localhost.
+          description: DNS label; becomes apps/<name>, namespaces app-<name>-stg and app-<name>-prd, and <name>.apps.lab.localhost.
           pattern: "^[a-z]([-a-z0-9]{0,30}[a-z0-9])?$"
           ui:autofocus: true
         description:
@@ -45,7 +46,9 @@ spec:
         tag:
           title: Tag
           type: string
-          description: A pinned version; `latest` is rejected by the platform policies.
+          description: >-
+            A pinned version, deployed to stg and prd; later versions go to stg first and are
+            promoted to prd. `latest` is rejected by the platform policies.
           default: "6.15.0"
           pattern: "^(?!latest$)[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
         port:
@@ -68,6 +71,7 @@ spec:
       properties:
         replicas:
           title: Replicas
+          description: Per environment (envs/<env>/values.yaml); change prd's later as needed.
           type: integer
           default: 1
           minimum: 1
@@ -120,8 +124,10 @@ spec:
         description: |
           Adds `apps/${{ parameters.name }}` from the golden-path template.
 
-          Merging deploys it to namespace `app-${{ parameters.name }}` through the apps
-          ApplicationSet, at https://${{ parameters.name }}.apps.lab.localhost.
+          Merging deploys it through the apps ApplicationSet to stg (namespace
+          `app-${{ parameters.name }}-stg`, https://${{ parameters.name }}-stg.apps.lab.localhost)
+          and prd (namespace `app-${{ parameters.name }}-prd`,
+          https://${{ parameters.name }}.apps.lab.localhost).
 
     # Keeps the PR link in the creator's notifications after they leave this page. Argo CD
     # notifies the owner again once the merged app is deployed (gitops/manifests/app-tenancy).
@@ -133,7 +139,7 @@ spec:
         entityRefs:
           - ${{ user.ref }}
         title: "${{ parameters.name }}: pull request ready for review"
-        info: Merge it to deploy ${{ parameters.name }} to https://${{ parameters.name }}.apps.lab.localhost.
+        info: Merge it to deploy ${{ parameters.name }} to stg and prd (https://${{ parameters.name }}.apps.lab.localhost).
         link: ${{ steps['publish'].output.remoteUrl }}
         topic: golden-path
         # A notification failure must not fail a run whose pull request already exists.
@@ -143,5 +149,7 @@ spec:
     links:
       - title: Pull request
         url: ${{ steps['publish'].output.remoteUrl }}
-      - title: Service URL (after merge)
+      - title: prd URL (after merge)
         url: https://${{ parameters.name }}.apps.lab.localhost
+      - title: stg URL (after merge)
+        url: https://${{ parameters.name }}-stg.apps.lab.localhost

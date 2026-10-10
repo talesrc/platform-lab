@@ -163,14 +163,18 @@ kyverno test gitops/manifests/kyverno-policies/tests
 ## Apps
 
 Workloads live in `apps/<name>/` and follow one golden path: the platform-owned Helm chart
-**`charts/app`**, published to `oci://ghcr.io/talesrc/charts/app`. An app is two files; an
-Argo CD ApplicationSet discovers every directory and deploys it (no per-app Application).
+**`charts/app`**, published to `oci://ghcr.io/talesrc/charts/app`. Every app runs in two
+environments, **stg** and **prd**; an Argo CD ApplicationSet discovers every directory and
+deploys it once per environment (no per-app Application).
 
 ```
 apps/<name>/
-  Chart.yaml      # depends on a pinned version of the app chart
-  values.yaml     # values under `app:`, e.g. image, port, probes, replicas
-  Chart.lock      # resolved dependency digest (helm dependency update)
+  Chart.yaml          # depends on a pinned version of the app chart
+  values.yaml         # shared by every environment, under `app:`: image repository, port, probes
+  envs/<env>/
+    values.yaml       # environment config: what differs between stg and prd (URLs, replicas, ...)
+    release.yaml      # the release: image tag, its env vars, requiredEnv; promoted stg -> prd
+  Chart.lock          # resolved dependency digest (helm dependency update)
   catalog-info.yaml   # Backstage entity (optional)
 ```
 
@@ -179,8 +183,8 @@ apps/<name>/
 | Manifests | rendered by `charts/app`: Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (replicas > 1) |
 | Defaults | non-root (UID 65532), read-only root filesystem (writable `emptyDir`s via `writablePaths`), no service-account token, requests + memory limit, `/readyz` + `/healthz` probes |
 | Values | `charts/app/values.yaml` documents them; `values.schema.json` rejects bad ones (e.g. a missing or `latest` image tag) before anything renders |
-| Namespace | `app-<name>`, created by the ApplicationSet |
-| URL | `https://<name>.apps.lab.localhost` (route on the gateway's `https-apps` listener) |
+| Namespaces | `app-<name>-stg` and `app-<name>-prd`, created by the ApplicationSet |
+| URLs | `https://<name>.apps.lab.localhost` (prd), `https://<name>-stg.apps.lab.localhost` (stg), routes on the gateway's `https-apps` listener |
 | Policies | must pass every lab Kyverno policy; the chart's defaults already do |
 
 **Chart versions.** Apps pin the chart version, so a chart change reaches an app only through a
@@ -195,38 +199,60 @@ its own certificate from the lab CA (a wildcard covers one label only, so `*.lab
 match `x.apps.lab.localhost`). HTTP requests are redirected to HTTPS as for platform hosts.
 
 **Add an app:** use Backstage (*Create → Golden-path service*), which opens a PR with
-`apps/<name>/`, or copy `apps/hello/` by hand. CI renders it, validates the schemas and runs
-every lab policy against it (`scripts/ci/check-app-policies.sh`); a violation fails the build,
-even though the cluster itself only audits. Once merged, the ApplicationSet creates `app-<name>`
-and syncs it, and the catalog picks up its `catalog-info.yaml` (a `Location` globs `apps/*`).
+`apps/<name>/`, or copy `apps/hello/` by hand. CI renders it per environment, validates the
+schemas and runs every lab policy against it (`scripts/ci/check-app-policies.sh`); a violation
+fails the build, even though the cluster itself only audits. Once merged, the ApplicationSet
+creates `app-<name>-stg` and `app-<name>-prd` and syncs them, and the catalog picks up its
+`catalog-info.yaml` (a `Location` globs `apps/*`).
 
-**Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas, so it also gets a
-PodDisruptionBudget; custom command/args, `/data` as an extra writable path). Verify:
+**Releases and promotion.** A release is the image tag *plus* the config that version expects,
+so it lives in one file, `envs/<env>/release.yaml`, and moves as one unit:
+
+1. a new version goes to stg: a PR changes `envs/stg/release.yaml` (tag, release-scoped env vars
+   in `app.env`, and `requiredEnv`, the env vars it needs from each environment);
+2. *Create → Promote to prd* in Backstage (or the *Promote stg to prd* link on the service's
+   page) copies it to `envs/prd/release.yaml`, asks for prd's value of any required env var prd
+   doesn't set yet, and opens the PR (`platform-lab:app:promote`,
+   `backstage/app/packages/backend/src/plugins/scaffolderPromote.ts`).
+
+CI (`scripts/ci/check-app-envs.py`) is the gate, whoever writes the PR: a release file holds only
+the tag, `app.env` and `requiredEnv`; an env var is release-scoped or environment config, never
+both; every required env var is set; and a changed `envs/prd/release.yaml` must equal
+`envs/stg/release.yaml` (a hotfix changes both in one PR).
+
+**Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas in prd, so it also gets
+a PodDisruptionBudget; custom command/args, `/data` as an extra writable path). Verify:
 
 ```bash
-kubectl get pods,httproute -n app-podinfo
-curl --cacert platform-ca.crt https://podinfo.apps.lab.localhost/
-kubectl get policyreport -n app-podinfo   # should list no failures
+kubectl get pods,pdb,httproute -n app-podinfo-prd
+curl --cacert platform-ca.crt https://podinfo.apps.lab.localhost/       # prd
+curl --cacert platform-ca.crt https://podinfo-stg.apps.lab.localhost/   # stg
+kubectl get policyreport -n app-podinfo-prd   # should list no failures
 ```
 
-In Prometheus, the `podinfo` target should be up (`up{namespace="app-podinfo"}`).
+In Prometheus, the `podinfo` targets should be up (`up{namespace=~"app-podinfo-.*"}`).
 
 ### Tenancy
 
-Every directory `apps/<name>/` (a Kustomize directory) becomes an Argo CD Application named
-`<name>`, generated by the `apps` ApplicationSet (`gitops/manifests/app-tenancy`):
+Every directory `apps/<name>/` becomes one Argo CD Application per environment, `<name>-stg`
+and `<name>-prd`, generated by the `apps` ApplicationSet (`gitops/manifests/app-tenancy`, a
+matrix of the environment list and the `apps/*` directories):
 
-- deployed to namespace `app-<name>`, created by Argo CD and labelled
-  `platform-lab/tenant: <name>` and `app.kubernetes.io/part-of: apps`
+- rendered with `values.yaml`, `envs/<env>/values.yaml` and `envs/<env>/release.yaml`, as Helm
+  release `<name>` (same resource names in every environment)
+- deployed to namespace `app-<name>-<env>`, created by Argo CD and labelled
+  `platform-lab/tenant: <name>`, `platform-lab/environment: <env>` and
+  `app.kubernetes.io/part-of: apps` (the Applications carry the same labels)
 - synced automatically (prune + self-heal); deleting the directory deletes the app and its resources
 - restricted by the `apps` AppProject: sources from this repo only, destinations `app-*` only,
   no cluster-scoped resources except the app's own Namespace, and no ResourceQuota,
   LimitRange or NetworkPolicy (those are the platform's)
-- exposed at `https://<name>.apps.lab.localhost` through an HTTPRoute on the gateway's
-  `https-apps` listener
-- not excluded from the Kyverno policies, so violations show up in `kubectl get policyreport -n app-<name>`
+- exposed at `https://<name>.apps.lab.localhost` (prd) and `https://<name>-stg.apps.lab.localhost`
+  (stg) through an HTTPRoute on the gateway's `https-apps` listener; the ApplicationSet sets the
+  hostname, so it follows the convention
+- not excluded from the Kyverno policies, so violations show up in `kubectl get policyreport -n app-<name>-<env>`
 
-Directory names must not clash with platform Application names (`kyverno`, `cert-manager`, ...),
+`<name>-<env>` must not clash with platform Application names (`kyverno`, `cert-manager`, ...),
 since all Applications live in the `argocd` namespace.
 
 ## Argo CD login with GitHub
@@ -300,8 +326,8 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
 
 | Tab/card | Source | Annotation | Access |
 |---|---|---|---|
-| Kubernetes | pods, deployments, restarts, errors, logs | `backstage.io/kubernetes-label-selector` (+ `-namespace`) | pod service account, read-only ClusterRole (no Secrets) |
-| Argo CD | sync status, health, history | `argocd/app-name` | `backstage` Argo CD account, `role:readonly` (API tokens only) |
+| Kubernetes | pods, deployments, restarts, errors, logs | `backstage.io/kubernetes-label-selector` (+ `-namespace` for platform components; golden-path apps omit it to show every environment) | pod service account, read-only ClusterRole (no Secrets) |
+| Argo CD | sync status, health, history | `argocd/app-name`, or `argocd/app-selector: platform-lab/tenant=<name>` for golden-path apps (all environments) | `backstage` Argo CD account, `role:readonly` (API tokens only) |
 | Grafana | dashboards | `grafana/dashboard-selector` | Viewer service account, via Backstage's proxy (token never reaches the browser) |
 
 The Argo CD and Grafana tokens come from `terraform/platform-access`. It reaches Argo CD with
@@ -333,7 +359,8 @@ resolution once a fixed version is out.
 
 Argo CD Notifications (configured in `terraform/platform-addons/notifications.tf`) calls
 Backstage's notifications API for every Application, with no per-app annotations; tenant apps
-are matched to their component by name. Alertmanager's webhook goes to a small backend plugin,
+are matched to their component by the `platform-lab/tenant` label (`hello-prd` → `hello`), and
+alerts in `app-<name>-<env>` reach component `<name>`. Alertmanager's webhook goes to a small backend plugin,
 `backstage/app/packages/backend/src/plugins/alertmanager.ts`; a resolved alert replaces its
 firing notification. Each caller has its own static token, generated by Terraform and limited
 to the one Backstage plugin it calls (`backend.auth.externalAccess`).
@@ -343,8 +370,10 @@ to the one Backstage plugin it calls (`backend.auth.externalAccess`).
 - **Golden-path template:** *Create → Golden-path service* renders
   `backstage/templates/golden-path-service/skeleton` into `apps/<name>/` (Deployment, Service,
   HTTPRoute at `<name>.apps.lab.localhost`, ServiceMonitor; compliant with the Kyverno policies)
-  and opens a pull request. Merging it deploys the service through the apps ApplicationSet;
-  the component shows up in the catalog once its `catalog-info.yaml` is on `main`.
+  and opens a pull request. Merging it deploys the service to stg and prd through the apps
+  ApplicationSet; the component shows up in the catalog once its `catalog-info.yaml` is on `main`.
+- **Promote template:** *Create → Promote to prd* (`backstage/templates/promote-app`) copies a
+  service's stg release to prd and opens a pull request; see [Apps](#apps).
 
 Opening pull requests needs a GitHub token (without one the portal is read-only and catalog
 reads use GitHub's anonymous rate limit of 60 requests/hour). Create a
@@ -473,7 +502,7 @@ metadata:
   annotations:
     kyverno.io/resource-name: <name>   # the workload's name
     kyverno.io/kind: Deployment
-    backstage.io/kubernetes-namespace: app-<name>
+    kyverno.io/namespace: app-<name>-prd   # or backstage.io/kubernetes-namespace
 spec:
   dependsOn:
     - resource:default/platform-lab-cluster   # carries kyverno.io/endpoint

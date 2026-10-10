@@ -7,17 +7,24 @@ metadata:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/hello
     # Docs tab: mkdocs.yml + docs/ in this directory.
     backstage.io/techdocs-ref: dir:.
-    # Live state on the entity page: pods (Kubernetes), sync/health (Argo CD), dashboards (Grafana).
-    backstage.io/kubernetes-namespace: app-hello
+    # Live state on the entity page, every environment (app-hello-stg, app-hello-prd): pods
+    # (Kubernetes, by label in any namespace), sync/health (Argo CD, by the ApplicationSet's
+    # tenant label), dashboards (Grafana).
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=hello'
-    argocd/app-name: hello
+    argocd/app-selector: platform-lab/tenant=hello
     grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
-    # Kyverno results on the entity page (Policy Reporter): the app's Deployment.
+    # Kyverno results on the entity page (Policy Reporter): the app's Deployment in prd.
     kyverno.io/resource-name: hello
     kyverno.io/kind: Deployment
+    kyverno.io/namespace: app-hello-prd
   links:
     - url: https://hello.apps.lab.localhost
-      title: hello
+      title: hello (prd)
+    - url: https://hello-stg.apps.lab.localhost
+      title: hello (stg)
+    # The "Promote to prd" template with this service filled in.
+    - url: https://backstage.lab.localhost/create/templates/default/promote-app?formData=%7B%22app%22%3A%22component%3Adefault%2Fhello%22%7D
+      title: Promote stg to prd
 spec:
   type: service
   lifecycle: experimental

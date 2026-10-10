@@ -198,16 +198,22 @@ metadata:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
     # Declared here, not in apps/podinfo, so `dir:.` would mean the repo root: point at its folder.
     backstage.io/techdocs-ref: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
-    backstage.io/kubernetes-namespace: app-podinfo
+    # Every environment (app-podinfo-stg, app-podinfo-prd): pods by label, Argo CD apps by tenant.
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=podinfo'
-    argocd/app-name: podinfo
+    argocd/app-selector: platform-lab/tenant=podinfo
     grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
-    # Kyverno results on the entity page (Policy Reporter): the app's Deployment.
+    # Kyverno results on the entity page (Policy Reporter): the app's Deployment in prd.
     kyverno.io/resource-name: podinfo
     kyverno.io/kind: Deployment
+    kyverno.io/namespace: app-podinfo-prd
   links:
     - url: https://podinfo.apps.lab.localhost
-      title: podinfo
+      title: podinfo (prd)
+    - url: https://podinfo-stg.apps.lab.localhost
+      title: podinfo (stg)
+    # The "Promote to prd" template with this service filled in.
+    - url: https://backstage.lab.localhost/create/templates/default/promote-app?formData=%7B%22app%22%3A%22component%3Adefault%2Fpodinfo%22%7D
+      title: Promote stg to prd
 spec:
   type: service
   lifecycle: experimental

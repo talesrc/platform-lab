@@ -1,6 +1,6 @@
-# Deployed by the apps ApplicationSet into namespace app-hello (Argo CD renders this chart).
+# Deployed by the apps ApplicationSet into app-hello-stg and app-hello-prd (Argo CD renders this chart).
 # All manifests come from the platform's golden-path chart (charts/app); this app only
-# pins its version and sets values (values.yaml). Renovate proposes chart upgrades.
+# pins its version and sets values (values.yaml, envs/<env>/). Renovate proposes chart upgrades.
 apiVersion: v2
 name: hello
 version: 1.0.0

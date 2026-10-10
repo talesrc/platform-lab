@@ -28,11 +28,18 @@ for app in "$ROOT"/apps/*/; do
   name="$(basename "$app")"
   # Pinned: what Argo CD deploys today. Local: the app with the charts/app working copy,
   # so a chart change that breaks the policies fails before it is published.
-  for mode in pinned local; do
-    echo "::group::apps/$name ($mode)"
-    "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" > "$OUT/app-$name-$mode.yaml"
-    kyverno apply "${policies[@]}" --resource "$OUT/app-$name-$mode.yaml" || status=1
-    echo "::endgroup::"
+  # Every environment (envs/<env>/), or the app alone if it has none (e.g. Kustomize).
+  envs=()
+  for dir in "$app"envs/*/; do [ -d "$dir" ] && envs+=("$(basename "$dir")"); done
+  [ "${#envs[@]}" -gt 0 ] || envs=("")
+  for env in "${envs[@]}"; do
+    for mode in pinned local; do
+      label="$name${env:+-$env}-$mode"
+      echo "::group::apps/$name ${env:+$env }($mode)"
+      "$ROOT/scripts/ci/render-app.sh" "$app" "$mode" "$env" > "$OUT/app-$label.yaml"
+      kyverno apply "${policies[@]}" --resource "$OUT/app-$label.yaml" || status=1
+      echo "::endgroup::"
+    done
   done
 done
 exit "$status"

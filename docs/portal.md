@@ -18,7 +18,7 @@ Each component's page shows its live state, selected by annotations in its `cata
 | Tab / card | Shows | Annotation |
 |---|---|---|
 | Kubernetes | pods, deployments, restarts, errors, logs | `backstage.io/kubernetes-label-selector`, `backstage.io/kubernetes-namespace` |
-| Argo CD | sync status, health, history | `argocd/app-name` |
+| Argo CD | sync status, health, history | `argocd/app-name`, or `argocd/app-selector` for golden-path apps (every environment) |
 | Grafana | dashboards | `grafana/dashboard-selector` |
 | Docs | the entity's TechDocs | `backstage.io/techdocs-ref` |
 
@@ -48,7 +48,7 @@ The bell in the sidebar collects notifications for the owner of each component
 
 | Event | Sent by |
 |---|---|
-| Golden-path pull request opened | the template |
+| Golden-path or promotion pull request opened | the template |
 | App deployed, sync failed, app degraded | Argo CD Notifications |
 | Alert firing / resolved | Alertmanager |
 

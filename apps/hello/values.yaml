@@ -1,7 +1,10 @@
-# Values for the golden-path chart (charts/app/values.yaml documents every option).
+# Values for the golden-path chart (charts/app/values.yaml documents every option), shared by
+# every environment. Per environment (envs/<env>/):
+#   values.yaml   environment config: what differs between stg and prd (URLs, replicas, ...)
+#   release.yaml  the release: image tag, release-scoped env vars and the env vars it requires;
+#                 promotion copies it from stg to prd as one unit.
 # Created from the golden-path template: https://hello.apps.lab.localhost
 app:
   image:
     repository: ghcr.io/stefanprodan/podinfo
-    tag: "6.15.0"
   port: 9898

@@ -1,0 +1,6 @@
+# podinfo in prd: environment config only (never promoted). The release is in release.yaml.
+app:
+  # Two replicas, so the chart also creates a PodDisruptionBudget.
+  replicas: 2
+  env:
+    PODINFO_UI_MESSAGE: podinfo (prd), deployed by Argo CD from platform-lab/apps/podinfo

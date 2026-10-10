@@ -26,16 +26,18 @@ Argo CD doesn't report an Application's health by default; a health check added 
 
 ## Apps
 
-`app-tenancy` generates one Application per directory under `apps/` (see
-[Apps and the golden path](apps.md)). Those Applications are restricted by the `apps`
-AppProject:
+`app-tenancy` generates one Application per directory under `apps/` and environment:
+`<name>-stg` and `<name>-prd`, in namespaces `app-<name>-stg` and `app-<name>-prd` (see
+[Apps and the golden path](apps.md)). Each renders the shared `values.yaml` plus that
+environment's `envs/<env>/values.yaml` and `envs/<env>/release.yaml`. Those Applications are
+restricted by the `apps` AppProject:
 
 - sources from this repository only, destinations `app-*` namespaces only;
 - no cluster-scoped resources except the app's own Namespace;
 - no ResourceQuota, LimitRange or NetworkPolicy (those belong to the platform);
 - synced automatically with prune and self-heal: deleting the directory deletes the app.
 
-Directory names must not clash with platform Application names (`kyverno`, `cert-manager`, …),
+`<name>-<env>` must not clash with platform Application names (`kyverno`, `cert-manager`, …),
 since every Application lives in the `argocd` namespace.
 
 ## Argo CD access

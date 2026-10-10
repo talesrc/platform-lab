@@ -1,0 +1,2 @@
+# hello in prd: environment config only (never promoted). The release is in release.yaml.
+app: {}
