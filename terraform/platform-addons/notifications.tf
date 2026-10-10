@@ -49,11 +49,12 @@ resource "kubernetes_secret_v1" "alertmanager_backstage" {
 }
 
 locals {
-  # Tenant apps (label from the apps ApplicationSet) notify the owner of the catalog
-  # Component of the same name; platform apps notify the platform team.
+  # Tenant apps (labels from the apps ApplicationSet) notify the owner of the catalog
+  # Component named by platform-lab/tenant (Application hello-prd -> component hello);
+  # platform apps notify the platform team.
   backstage_recipient = <<-EOT
     {{- if eq (dig "metadata" "labels" "app.kubernetes.io/part-of" "" .app) "apps" -}}
-    component:default/{{ .app.metadata.name }}
+    component:default/{{ index .app.metadata.labels "platform-lab/tenant" }}
     {{- else -}}
     group:default/platform-team
     {{- end -}}
@@ -65,7 +66,7 @@ locals {
     deployed = {
       title       = "{{ .app.metadata.name }} deployed"
       description = "printf \"Revision %s is synced and healthy.\" (trunc 7 .app.status.sync.revision)"
-      link        = "\"/catalog/default/component/{{ .app.metadata.name }}\""
+      link        = "\"/catalog/default/component/{{ index .app.metadata.labels \"platform-lab/tenant\" }}\""
       severity    = "normal"
       scope       = ""
     }
