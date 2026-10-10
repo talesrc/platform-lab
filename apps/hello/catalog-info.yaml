@@ -12,6 +12,9 @@ metadata:
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=hello'
     argocd/app-name: hello
     grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
+    # Kyverno results on the entity page (Policy Reporter): the app's Deployment.
+    kyverno.io/resource-name: hello
+    kyverno.io/kind: Deployment
   links:
     - url: https://hello.apps.lab.localhost
       title: hello
@@ -22,3 +25,4 @@ spec:
   system: platform-lab
   dependsOn:
     - component:platform-gateway
+    - resource:default/platform-lab-cluster

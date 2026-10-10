@@ -202,6 +202,9 @@ metadata:
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=podinfo'
     argocd/app-name: podinfo
     grafana/dashboard-selector: "title == 'Kubernetes / Compute Resources / Namespace (Workloads)' || title == 'Kubernetes / Compute Resources / Namespace (Pods)'"
+    # Kyverno results on the entity page (Policy Reporter): the app's Deployment.
+    kyverno.io/resource-name: podinfo
+    kyverno.io/kind: Deployment
   links:
     - url: https://podinfo.apps.lab.localhost
       title: podinfo
@@ -212,6 +215,7 @@ spec:
   system: platform-lab
   dependsOn:
     - component:platform-gateway
+    - resource:default/platform-lab-cluster
 ---
 # Every golden-path app registers itself: Backstage expands this glob through its GitHub
 # integration, so apps/<name>/catalog-info.yaml shows up once merged to main.
@@ -224,3 +228,18 @@ spec:
   type: url
   targets:
     - https://github.com/talesrc/platform-lab/blob/main/apps/*/catalog-info.yaml
+---
+# The lab's Kubernetes cluster. Golden-path apps depend on it; the Policy Reporter plugin reads
+# Kyverno results from the API in kyverno.io/endpoint (gitops/platform/policy-reporter.yaml).
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: platform-lab-cluster
+  title: platform-lab cluster (kind)
+  description: The kind cluster every platform component and golden-path app runs on.
+  annotations:
+    kyverno.io/endpoint: http://policy-reporter.policy-reporter.svc:8080/
+spec:
+  type: kubernetes-cluster
+  owner: group:platform-team
+  system: platform-lab
