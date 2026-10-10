@@ -1,2 +1,14 @@
 # cluster_state_path  = "../kind-cluster/terraform.tfstate"
 # token_renew_after   = "720h"
+
+# Backstage's GitHub values, stored in Vault (secret/platform-lab/backstage/*) and synced to
+# Kubernetes by External Secrets. Keep them only in terraform.tfvars (git-ignored).
+#
+# Scaffolder token: fine-grained PAT on talesrc/platform-lab, Contents + Pull requests RW.
+# backstage_github_token = "github_pat_..."
+#
+# Sign-in OAuth App (callback https://backstage.lab.localhost/api/auth/github/handler/frame).
+# backstage_github_oauth = {
+#   client_id     = "<client id>"
+#   client_secret = "<client secret>"
+# }

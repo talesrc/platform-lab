@@ -1,4 +1,9 @@
-output "backstage_secret" {
-  description = "Secret (namespace/name) holding the Argo CD and Grafana tokens for Backstage."
-  value       = "${var.backstage_namespace}/${kubernetes_secret_v1.backstage_platform_access.metadata[0].name}"
+output "vault_paths" {
+  description = "Vault KV paths (mount secret/) written for Backstage; External Secrets syncs them."
+  value       = nonsensitive(keys(local.backstage_secrets))
+}
+
+output "vault_url" {
+  description = "Vault UI (lab-only root token: kubectl -n vault get secret vault-unseal-keys)."
+  value       = "https://vault.lab.localhost"
 }

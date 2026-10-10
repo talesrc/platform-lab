@@ -65,3 +65,29 @@ provider "grafana" {
   url  = data.external.grafana_port_forward.result.url
   auth = "${data.kubernetes_secret_v1.grafana_admin.data["admin-user"]}:${data.kubernetes_secret_v1.grafana_admin.data["admin-password"]}"
 }
+
+# Vault: same port-forward approach as Grafana. LAB-ONLY: Terraform authenticates with the
+# root token that the init CronJob stored (gitops/manifests/vault/unseal.yaml). In production
+# Terraform would log in through an auth method (e.g. OIDC or JWT from CI) with a scoped policy.
+data "kubernetes_secret_v1" "vault_unseal" {
+  metadata {
+    name      = var.vault.unseal_secret
+    namespace = var.vault.namespace
+  }
+}
+
+data "external" "vault_port_forward" {
+  program = ["bash", "${path.module}/port-forward.sh"]
+  query = {
+    kubeconfig = local.kubeconfig_path
+    namespace  = var.vault.namespace
+    service    = var.vault.service
+    port       = "8200"
+    lifetime   = "600"
+  }
+}
+
+provider "vault" {
+  address = data.external.vault_port_forward.result.url
+  token   = data.kubernetes_secret_v1.vault_unseal.data["root-token"]
+}

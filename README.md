@@ -9,8 +9,8 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 |---|---|---|
 | `terraform/registry-cache` | Terraform | Pull-through image caches (docker.io, quay.io, registry.k8s.io, ghcr.io, ecr-public.aws.com; reg.kyverno.io via ghcr.io) and the `kind` Docker network; kept across cluster rebuilds |
 | `terraform/kind-cluster` | Terraform | kind cluster (via the kind CLI): nodes, version, networking, port mappings |
-| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD (with its notifications), the root app-of-apps, the `backstage` and `monitoring` namespaces and their Secrets (optional GitHub token, notification tokens) |
-| `terraform/platform-access` | Terraform | Day-1 access for Backstage's plugins: read-only Argo CD token and Grafana Viewer token, stored in the `backstage` namespace (runs after platform-addons) |
+| `terraform/platform-addons` | Terraform | Bootstrap only: Argo CD (with its notifications), the root app-of-apps, the `backstage` and `monitoring` namespaces and the notification-token Secrets |
+| `terraform/platform-access` | Terraform | Day-1 configuration after platform-addons: Vault (KV, Kubernetes auth, External Secrets role) and the values it stores (Backstage's GitHub values, read-only Argo CD token, Grafana Viewer token); see [Secrets](#secrets-vault--external-secrets) |
 | `gitops/platform` | Argo CD | Child Applications, synced in waves |
 | `gitops/manifests` | Argo CD | Plain manifests referenced by Applications |
 | `apps` | Argo CD (ApplicationSet) | Workloads on the golden path, one directory per app (see [Apps](#apps)) |
@@ -21,12 +21,14 @@ with Terraform and then managed with GitOps by [Argo CD](https://argo-cd.readthe
 
 Sync waves under `gitops/platform`:
 
-1. `cert-manager`, `envoy-gateway`, `kyverno` and `cloudnative-pg` (wave -2)
+1. `cert-manager`, `envoy-gateway`, `kyverno`, `cloudnative-pg` and `external-secrets` (wave -2)
 2. `cert-manager-issuers`, `metrics-server` and `kube-prometheus-stack` (wave -1): self-signed root → `platform-ca` ClusterIssuer; resource metrics; monitoring stack (see [Observability](#observability))
 3. `kyverno-pod-security` and `kyverno-policies` (wave -1): policies in Audit mode (see [Policies](#policies))
-4. `backstage` (wave -1): developer portal (see [Developer portal](#developer-portal))
+4. `backstage` and `vault` (wave -1): developer portal (see [Developer portal](#developer-portal)); secret store (see [Secrets](#secrets-vault--external-secrets))
 5. `platform-gateway` (wave 0): wildcard `*.lab.localhost` certificate, HTTPS listener, HTTP→HTTPS redirect, routes
 6. `app-tenancy` (wave 1): the `apps` AppProject and ApplicationSet (see [Tenancy](#tenancy))
+7. `platform-secrets` (wave 2): the Vault ClusterSecretStore and the ExternalSecrets; last, because
+   it is Degraded until `terraform/platform-access` has configured Vault
 
 A wave starts only when every app of the previous one is Healthy, and `Degraded` counts as
 not Healthy. Platform services exposed through `platform-gateway` (wave 0) must therefore come
@@ -35,7 +37,7 @@ block every later wave.
 
 ## Requirements
 
-Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.32+, Terraform ≥ 1.6, kubectl.
+Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.32+, Terraform ≥ 1.7, kubectl.
 
 ## Bring it up
 
@@ -52,7 +54,8 @@ cd ../platform-addons
 cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 
-# After Argo CD has synced (Grafana must be up): tokens for Backstage's plugins
+# After Argo CD has synced (Grafana up, Vault initialized by its unseal CronJob, ~1 min):
+# Vault configuration and the secrets External Secrets syncs into the cluster
 cd ../platform-access
 cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
@@ -278,7 +281,7 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
 1. Create a **second** OAuth App (GitHub allows one callback URL per app, so Argo CD's can't be
    reused): Homepage URL `https://backstage.lab.localhost`, Authorization callback URL
    `https://backstage.lab.localhost/api/auth/github/handler/frame`.
-2. Put it in `terraform/platform-addons/terraform.tfvars` (git-ignored) and apply:
+2. Put it in `terraform/platform-access/terraform.tfvars` (git-ignored) and apply:
 
    ```hcl
    backstage_github_oauth = {
@@ -287,7 +290,8 @@ signs in only if a catalog User has the same name (`talesrc` in `catalog-info.ya
    }
    ```
 
-   Terraform stores it as the `backstage-github-oauth` Secret (`AUTH_GITHUB_CLIENT_ID`,
+   Terraform stores it in Vault (`secret/platform-lab/backstage/github-oauth`); External
+   Secrets turns it into the `backstage-github-oauth` Secret (`AUTH_GITHUB_CLIENT_ID`,
    `AUTH_GITHUB_CLIENT_SECRET`). Without it nobody can sign in.
 
 **Entity pages** show each component's live state, selected by annotations in its
@@ -345,14 +349,83 @@ Opening pull requests needs a GitHub token (without one the portal is read-only 
 reads use GitHub's anonymous rate limit of 60 requests/hour). Create a
 [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) for
 `talesrc/platform-lab` only, with **Contents** and **Pull requests** set to *Read and write*,
-then add it to `terraform/platform-addons/terraform.tfvars` (git-ignored) and apply:
+then add it to `terraform/platform-access/terraform.tfvars` (git-ignored) and apply:
 
 ```hcl
 backstage_github_token = "github_pat_..."
 ```
 
-Terraform stores it as the `backstage-github` Secret, which Backstage reads as `GITHUB_TOKEN`
-(restart the pod after changing it: `kubectl -n backstage rollout restart deploy/backstage`).
+Terraform stores it in Vault; External Secrets turns it into the `backstage-github` Secret,
+which Backstage reads as `GITHUB_TOKEN`. The apply restarts Backstage when a value changes.
+
+## Secrets (Vault + External Secrets)
+
+[HashiCorp Vault](https://developer.hashicorp.com/vault) is the lab's secret store, and the
+[External Secrets Operator](https://external-secrets.io) (ESO) turns its values into the
+Kubernetes Secrets workloads read. Nothing secret is in git, and Terraform writes values to
+Vault instead of creating Kubernetes Secrets.
+
+```
+terraform/platform-access ──writes──▶ Vault  secret/platform-lab/backstage/{github,github-oauth,platform-access}
+                                         │  Kubernetes auth: role external-secrets (read-only)
+ESO (ClusterSecretStore vault) ─reads────┘
+   └─▶ ExternalSecrets ─▶ Secrets backstage-github, backstage-github-oauth, backstage-platform-access
+```
+
+| Piece | Where |
+|---|---|
+| Vault 2.0 (chart 0.34.1): single node, Raft storage on a 1Gi PVC, UI at https://vault.lab.localhost | `gitops/platform/vault.yaml` (wave -1) |
+| Init/unseal CronJob (lab-only, below) | `gitops/manifests/vault/unseal.yaml` |
+| External Secrets Operator (chart 2.12.0) | `gitops/platform/external-secrets.yaml` (wave -2) |
+| ClusterSecretStore `vault`, ExternalSecrets for Backstage | `gitops/manifests/platform-secrets`, app `platform-secrets` (wave 2) |
+| KV v2 mount `secret/`, Kubernetes auth, policy + role `external-secrets`, the values | `terraform/platform-access` |
+
+ExternalSecrets keep the **same Secret names and keys** Terraform used to create, so
+Backstage's deployment didn't change. ESO refreshes every 5 minutes; after a value changes,
+`terraform -chdir=terraform/platform-access apply` forces a sync and restarts Backstage
+(Backstage reads Secrets as environment variables at start-up). External Secrets logs in to
+Vault with its own service-account token (audience `vault`) and may only read
+`secret/platform-lab/*`.
+
+**Unsealing (LAB-ONLY).** Vault starts *sealed* after every restart. Production setups use
+auto-unseal: a `seal` stanza pointing at a cloud KMS, an HSM or another Vault's Transit
+engine, so no person or job ever holds the key. A local kind cluster has none of those, so
+the `vault-unseal` CronJob (every minute) initializes Vault once (1 key share, threshold 1:
+with no separate key holders, more shares side by side add nothing) and stores the unseal key
+**and the root token** in the Secret `vault/vault-unseal-keys`, then unseals Vault whenever it
+finds it sealed. Anyone who can read that Secret owns Vault; Terraform also uses that root token.
+Fine for a single-user lab, never for production (where the root token is revoked after setup
+and Terraform logs in through an auth method).
+
+A sealed or uninitialized Vault still reports Ready (its readiness check accepts those
+states), so it can't block later sync waves; the `platform-secrets` app sits in the last wave
+because it is Degraded until `platform-access` has configured Vault.
+
+```bash
+kubectl -n vault get secret vault-unseal-keys -o jsonpath='{.data.root-token}' | base64 -d; echo
+kubectl -n vault logs -l app.kubernetes.io/name=vault-unseal --tail=5   # last unseal run
+kubectl get externalsecrets -A        # READY True, STATUS SecretSynced
+```
+
+**Still created by Terraform** (follow-ups): Argo CD's Dex client secret and the notification
+tokens (`notifications.tf`: `backstage-external-access`, `monitoring/alertmanager-backstage`,
+`argocd-notifications-secret`). They are generated or needed while `platform-addons` installs
+Argo CD and before Alertmanager starts, i.e. before Vault exists; moving them means a
+two-phase bootstrap or Vault-generated tokens.
+
+**Migrating a running lab** (Terraform-managed → ESO-managed Secrets):
+
+1. Push; Argo CD installs `external-secrets`, `vault` (the CronJob initializes it within a
+   minute) and `platform-secrets` (Degraded for now).
+2. Move `backstage_github_token` and `backstage_github_oauth` from
+   `terraform/platform-addons/terraform.tfvars` to `terraform/platform-access/terraform.tfvars`.
+3. `terraform -chdir=terraform/platform-addons apply`: its `removed` blocks make Terraform
+   forget the two GitHub Secrets without deleting them (Backstage keeps working).
+4. `kubectl -n backstage delete secret backstage-github backstage-github-oauth backstage-platform-access`
+   (ESO only adopts Secrets it created; the running Backstage pod keeps its environment).
+5. `terraform -chdir=terraform/platform-access init -upgrade && terraform -chdir=terraform/platform-access apply`:
+   forgets its old Secret (`removed` block), configures Vault, writes the values, waits for
+   the ExternalSecrets to be Ready and restarts Backstage.
 
 ## Tear it down
 

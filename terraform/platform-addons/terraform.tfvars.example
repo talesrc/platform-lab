@@ -24,13 +24,5 @@ gitops = {
   path            = "gitops/platform"
 }
 
-# Backstage scaffolder token; keep it only in terraform.tfvars (git-ignored).
-# backstage_github_token = "github_pat_..."
-
-# Backstage: GitHub sign-in (its own OAuth App, callback
-# https://backstage.lab.localhost/api/auth/github/handler/frame) and the template's PR token.
-# backstage_github_oauth = {
-#   client_id     = "<client id>"
-#   client_secret = "<client secret>"
-# }
-# backstage_github_token = "github_pat_..."
+# Backstage's GitHub values (scaffolder PAT, sign-in OAuth App) moved to
+# terraform/platform-access, which stores them in Vault.

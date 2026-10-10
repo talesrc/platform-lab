@@ -54,25 +54,3 @@ variable "argocd_app_developers" {
   type        = list(string)
   default     = []
 }
-
-variable "backstage_github_token" {
-  description = "Fine-grained GitHub PAT for Backstage (Contents + Pull requests read/write on platform-lab). null = read-only portal."
-  type        = string
-  default     = null
-  sensitive   = true
-}
-
-variable "backstage_github_oauth" {
-  description = <<-EOT
-    GitHub OAuth App for Backstage sign-in (a separate app from Argo CD's: one callback URL per app).
-    Callback URL: https://backstage.lab.localhost/api/auth/github/handler/frame.
-    Users sign in only if their GitHub login matches a catalog User (catalog-info.yaml).
-    Set it only in terraform.tfvars (gitignored), never in git. null = nobody can sign in.
-  EOT
-  type = object({
-    client_id     = string
-    client_secret = string
-  })
-  default   = null
-  sensitive = true
-}
