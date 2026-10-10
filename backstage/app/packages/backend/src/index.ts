@@ -40,10 +40,21 @@ backend.add(import('@backstage/plugin-catalog-backend-module-logs'));
 
 // permission plugin
 backend.add(import('@backstage/plugin-permission-backend'));
-// See https://backstage.io/docs/permissions/getting-started for how to create your own permission policy
+
+// --- Standards (IDP phase 4) ------------------------------------------------------------
+// Permission policy: everyone signed in reads and runs templates; catalog changes are for
+// entity owners / the platform team (src/plugins/permissionPolicy.ts).
+backend.add(import('./plugins/permissionPolicy'));
+// Scorecards: Tech Insights with config-defined JSON-rules checks (app-config.production.yaml)
+// and platform-lab facts (src/plugins/techInsightsPlatformLab.ts).
+backend.add(import('@backstage-community/plugin-tech-insights-backend'));
 backend.add(
-  import('@backstage/plugin-permission-backend-module-allow-all-policy'),
+  import('@backstage-community/plugin-tech-insights-backend-module-jsonfc'),
 );
+backend.add(import('./plugins/techInsightsPlatformLab'));
+// Kyverno policy results per entity, from Policy Reporter (gitops/platform/policy-reporter.yaml).
+backend.add(import('@kyverno/backstage-plugin-policy-reporter-backend'));
+// --- end Standards ----------------------------------------------------------------------
 
 // search plugin
 backend.add(import('@backstage/plugin-search-backend'));
