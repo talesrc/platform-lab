@@ -209,16 +209,26 @@ creates `app-<name>-stg` and `app-<name>-prd` and syncs them, and the catalog pi
 so it lives in one file, `envs/<env>/release.yaml`, and moves as one unit:
 
 1. a new version goes to stg: a PR changes `envs/stg/release.yaml` (tag, release-scoped env vars
-   in `app.env`, and `requiredEnv`, the env vars it needs from each environment);
-2. *Create → Promote to prd* in Backstage (or the *Promote stg to prd* link on the service's
-   page) copies it to `envs/prd/release.yaml`, asks for prd's value of any required env var prd
-   doesn't set yet, and opens the PR (`platform-lab:app:promote`,
-   `backstage/app/packages/backend/src/plugins/scaffolderPromote.ts`).
+   in `app.env`, and `requiredEnv`, the env vars it needs from each environment). Renovate opens
+   these for new image versions (the `# renovate:` comment above the tag; stg files only) and
+   merges minor/patch ones once CI passes;
+2. *Create → Promote to prd* in Backstage (or the *Releases* card on the service's page) checks
+   that stg runs the release well (Argo CD: Synced, Healthy, on the image, deployed at least
+   10 minutes ago; Alertmanager: no warning/critical alert in `app-<name>-stg`), copies it to
+   `envs/prd/release.yaml`, asks for prd's value of any required env var prd doesn't set yet,
+   removes the ones the release no longer needs, and opens the PR (`platform-lab:app:promote`,
+   `backstage/app/packages/backend/src/plugins/scaffolderPromote.ts`);
+3. *Create → Roll back prd* restores the release prd ran before (git history of
+   `envs/prd/release.yaml`) and opens the PR (`platform-lab:app:rollback`).
 
 CI (`scripts/ci/check-app-envs.py`) is the gate, whoever writes the PR: a release file holds only
 the tag, `app.env` and `requiredEnv`; an env var is release-scoped or environment config, never
-both; every required env var is set; and a changed `envs/prd/release.yaml` must equal
-`envs/stg/release.yaml` (a hotfix changes both in one PR).
+both; every required env var is set; a changed `envs/prd/release.yaml` must equal
+`envs/stg/release.yaml` or a release prd ran before (a hotfix changes both in one PR); and a
+`# renovate:` comment names the app's image repository.
+
+Renovate needs the [Renovate GitHub app](https://github.com/apps/renovate) installed on the
+repository; `renovate.json` is its configuration.
 
 **Sample: podinfo** — `https://podinfo.apps.lab.localhost` (2 replicas in prd, so it also gets
 a PodDisruptionBudget; custom command/args, `/data` as an extra writable path). Verify:
@@ -372,8 +382,11 @@ to the one Backstage plugin it calls (`backend.auth.externalAccess`).
   HTTPRoute at `<name>.apps.lab.localhost`, ServiceMonitor; compliant with the Kyverno policies)
   and opens a pull request. Merging it deploys the service to stg and prd through the apps
   ApplicationSet; the component shows up in the catalog once its `catalog-info.yaml` is on `main`.
-- **Promote template:** *Create → Promote to prd* (`backstage/templates/promote-app`) copies a
-  service's stg release to prd and opens a pull request; see [Apps](#apps).
+- **Release templates:** *Create → Promote to prd* (`backstage/templates/promote-app`) checks
+  stg and copies a service's stg release to prd; *Create → Roll back prd*
+  (`backstage/templates/rollback-app`) restores prd's previous release. Both open a pull
+  request; see [Apps](#apps). Golden-path services also get a *Releases* card (what runs in
+  each environment, from Argo CD) with both actions.
 
 Opening pull requests needs a GitHub token (without one the portal is read-only and catalog
 reads use GitHub's anonymous rate limit of 60 requests/hour). Create a
@@ -489,9 +502,11 @@ PostgreSQL; the checks are JSON rules in `app-config.production.yaml` (`techInsi
 | Shows live state | Kubernetes and Argo CD annotations are set | `service` components |
 | Has links | `metadata.links` is not empty | components |
 | On the latest golden-path chart | `apps/<name>/Chart.yaml` depends on the newest `charts/app` version | golden-path apps |
+| prd keeps up with stg | prd runs stg's release, or stg's different release is at most 14 days old | `service` components |
 
-The last three use `platformLabFactRetriever` (`packages/backend/src/plugins/techInsightsPlatformLab.ts`),
-which reads both `Chart.yaml` files through the GitHub integration, hourly.
+The last four use `platformLabFactRetriever` (`packages/backend/src/plugins/techInsightsPlatformLab.ts`),
+which reads the `Chart.yaml` and `release.yaml` files through the GitHub integration, and when
+stg's release last changed through the GitHub API, hourly.
 
 **Kyverno results per entity**: [Policy Reporter](https://kyverno.github.io/policy-reporter/)
 (`gitops/platform/policy-reporter.yaml`, core API only) aggregates Kyverno's PolicyReports, and

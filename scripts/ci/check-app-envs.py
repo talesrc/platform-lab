@@ -12,12 +12,16 @@ environment as one unit, so:
 3. every name in requiredEnv is set in that environment;
 4. with --base <git ref> (pull requests): a release.yaml that changed since <ref> must equal
    the previous environment's release.yaml, so prd only runs what stg runs. A hotfix changes
-   both files in the same pull request.
+   both files in the same pull request; a rollback restores a release the environment ran
+   before (an earlier version of its release.yaml in git);
+5. a `# renovate: ... depName=<image>` comment (Renovate bumps stg's tag) names the app's
+   image repository from values.yaml.
 
 Usage: check-app-envs.py [--base <git ref>]
 """
 import argparse
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -26,6 +30,8 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # Promotion order; must match the list generator in gitops/manifests/app-tenancy/applicationset.yaml.
 ENVIRONMENTS = ["stg", "prd"]
+# How many earlier versions of a release.yaml a rollback may go back to.
+ROLLBACK_DEPTH = 20
 RELEASE_KEYS = {"app": {"image": {"tag"}, "env": None}, "requiredEnv": None}
 
 
@@ -58,10 +64,25 @@ def at_ref(ref, path):
     return (yaml.safe_load(result.stdout) or {}) if result.returncode == 0 else None
 
 
+def earlier_versions(base, path):
+    """Parsed versions of a file in the history of <base>, newest first."""
+    rel = path.relative_to(ROOT).as_posix()
+    log = subprocess.run(
+        ["git", "-C", str(ROOT), "log", f"-{ROLLBACK_DEPTH}", "--format=%H", base, "--", rel],
+        capture_output=True, text=True,
+    )
+    for sha in log.stdout.split():
+        version = at_ref(sha, path)
+        if version is not None:
+            yield version
+
+
 def check_app(app, base):
     errors = []
     name = app.name
-    shared = env_of(load(app / "values.yaml")) if (app / "values.yaml").exists() else {}
+    shared_values = load(app / "values.yaml") if (app / "values.yaml").exists() else {}
+    shared = env_of(shared_values)
+    repository = ((shared_values.get("app") or {}).get("image") or {}).get("repository")
 
     envs_dir = app / "envs"
     present = sorted(p.name for p in envs_dir.iterdir() if p.is_dir()) if envs_dir.is_dir() else []
@@ -77,6 +98,13 @@ def check_app(app, base):
             continue
         values, release = load(values_file), load(release_file)
         releases[env] = release
+
+        for dep in re.findall(r"#\s*renovate:.*depName=(\S+)", release_file.read_text()):
+            if repository and dep != repository:
+                errors.append(
+                    f"envs/{env}/release.yaml: the renovate comment's depName={dep} is not "
+                    f"the app's image repository ({repository} in values.yaml)"
+                )
 
         for key in unexpected_keys(release, RELEASE_KEYS):
             errors.append(
@@ -113,11 +141,16 @@ def check_app(app, base):
                 continue
             if at_ref(base, envs_dir / env / "release.yaml") == releases[env]:
                 continue
-            if releases[env] != releases[previous]:
-                errors.append(
-                    f"envs/{env}/release.yaml changed but differs from envs/{previous}/release.yaml: "
-                    f"only promote what runs in {previous} (copy the file, or change both for a hotfix)"
-                )
+            if releases[env] == releases[previous]:
+                continue
+            # A rollback: a release this environment ran before.
+            if any(v == releases[env] for v in earlier_versions(base, envs_dir / env / "release.yaml")):
+                continue
+            errors.append(
+                f"envs/{env}/release.yaml changed but differs from envs/{previous}/release.yaml and "
+                f"from the releases {env} ran before: only promote what runs in {previous} (copy the "
+                f"file, roll back to an earlier {env} release, or change both for a hotfix)"
+            )
 
     return [f"apps/{name}: {e}" for e in errors]
 
