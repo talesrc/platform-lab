@@ -132,7 +132,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: unseal
-              image: curlimages/curl:8.17.0
+              image: curlimages/curl:8.22.0
               command: [sh, /scripts/unseal.sh]
               resources:
                 requests:
