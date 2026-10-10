@@ -125,6 +125,9 @@ resource "terraform_data" "backstage_restart" {
     interpreter = ["/bin/bash", "-c"]
     command     = <<-EOT
       set -euo pipefail
+      # The store only turns Ready once Vault's Kubernetes auth (created above) works. Forcing a
+      # sync before that fails and puts the ExternalSecrets into retry back-off past the wait below.
+      kubectl wait clustersecretstore/vault --for=condition=Ready --timeout=180s
       for es in $EXTERNALSECRETS; do
         kubectl -n "$NAMESPACE" annotate externalsecret "$es" force-sync="$(date +%s)" --overwrite
       done
