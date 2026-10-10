@@ -1,0 +1,12 @@
+# Docs for ${{ values.name }}, rendered by Backstage TechDocs (catalog-info.yaml:
+# backstage.io/techdocs-ref: dir:.). Preview: pip install mkdocs-techdocs-core && mkdocs serve
+site_name: ${{ values.name }}
+site_description: ${{ values.description }}
+repo_url: https://github.com/talesrc/platform-lab
+edit_uri: edit/main/apps/${{ values.name }}/docs/
+
+nav:
+  - Overview: index.md
+
+plugins:
+  - techdocs-core

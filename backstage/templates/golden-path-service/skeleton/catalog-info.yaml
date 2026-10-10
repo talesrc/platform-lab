@@ -5,6 +5,8 @@ metadata:
   description: ${{ values.description }}
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/${{ values.name }}
+    # Docs tab: mkdocs.yml + docs/ in this directory.
+    backstage.io/techdocs-ref: dir:.
     # Live state on the entity page: pods (Kubernetes), sync/health (Argo CD), dashboards (Grafana).
     backstage.io/kubernetes-namespace: app-${{ values.name }}
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=${{ values.name }}'

@@ -1,0 +1,12 @@
+# Docs for hello, rendered by Backstage TechDocs (catalog-info.yaml:
+# backstage.io/techdocs-ref: dir:.). Preview: pip install mkdocs-techdocs-core && mkdocs serve
+site_name: hello
+site_description: A service on the platform-lab golden path named hello, with tests purpose.
+repo_url: https://github.com/talesrc/platform-lab
+edit_uri: edit/main/apps/hello/docs/
+
+nav:
+  - Overview: index.md
+
+plugins:
+  - techdocs-core

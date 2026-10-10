@@ -1,0 +1,12 @@
+# Docs for podinfo, rendered by Backstage TechDocs (the podinfo entity in the root
+# catalog-info.yaml points here with backstage.io/techdocs-ref: url:...).
+site_name: podinfo
+site_description: Reference application on the golden path.
+repo_url: https://github.com/talesrc/platform-lab
+edit_uri: edit/main/apps/podinfo/docs/
+
+nav:
+  - Overview: index.md
+
+plugins:
+  - techdocs-core
