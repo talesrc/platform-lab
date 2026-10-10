@@ -9,7 +9,7 @@ described in the [catalog](/catalog) and deployed from git by Argo CD.
 
 ### Ship a service in three steps
 
-1. **Create** — fill in the golden-path form. It renders the manifests for you.
+1. **Create** — fill in the golden-path form. It renders the chart values for you.
 2. **Review and merge** the pull request it opens on \`talesrc/platform-lab\`.
 3. **Argo CD deploys it** to namespace \`app-<name>\`, live at
    \`https://<name>.apps.lab.localhost\`, with Prometheus scraping and dashboards.
@@ -41,7 +41,31 @@ const welcomeWidget = HomePageWidgetBlueprint.make({
   },
 });
 
+// Components owned by the signed-in user or their groups.
+const myServicesWidget = HomePageWidgetBlueprint.make({
+  name: 'my-services',
+  params: {
+    name: 'MyServices',
+    title: 'My services',
+    description: 'Components owned by you or your groups',
+    components: () =>
+      import('./MyServices').then(m => ({ Content: m.MyServices })),
+  },
+});
+
+// Every platform-lab component with its live Argo CD sync and health.
+const platformStatusWidget = HomePageWidgetBlueprint.make({
+  name: 'platform-status',
+  params: {
+    name: 'PlatformStatus',
+    title: 'Platform status',
+    description: 'Argo CD sync and health of the platform components',
+    components: () =>
+      import('./PlatformStatus').then(m => ({ Content: m.PlatformStatus })),
+  },
+});
+
 export const homeModule = createFrontendModule({
   pluginId: 'home',
-  extensions: [welcomeWidget],
+  extensions: [welcomeWidget, myServicesWidget, platformStatusWidget],
 });

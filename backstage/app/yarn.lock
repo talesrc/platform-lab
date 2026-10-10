@@ -14579,6 +14579,7 @@ __metadata:
   dependencies:
     "@backstage-community/plugin-grafana": "npm:^1.1.0"
     "@backstage-community/plugin-tech-insights": "npm:1.5.0"
+    "@backstage/catalog-model": "npm:^1.10.1"
     "@backstage/cli": "npm:^0.36.6"
     "@backstage/core-components": "npm:^0.18.14"
     "@backstage/core-plugin-api": "npm:^1.12.10"
@@ -14592,6 +14593,7 @@ __metadata:
     "@backstage/plugin-auth": "npm:^0.1.12"
     "@backstage/plugin-catalog": "npm:^2.0.9"
     "@backstage/plugin-catalog-graph": "npm:^0.6.8"
+    "@backstage/plugin-catalog-react": "npm:^3.2.3"
     "@backstage/plugin-home": "npm:^0.9.10"
     "@backstage/plugin-home-react": "npm:^0.1.42"
     "@backstage/plugin-kubernetes": "npm:^0.12.23"

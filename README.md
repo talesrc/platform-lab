@@ -495,6 +495,23 @@ review, Kyverno, the `apps` AppProject). Service-to-service calls (fact retrieve
 Alertmanager webhook plugin) and the external access tokens (Argo CD Notifications,
 Alertmanager) use service principals, which the policy doesn't gate.
 
+
+### Home page
+
+The landing page (`/`) is the developer's front door. Its default layout is set in
+`backstage/app/app-config.yaml` (`page:home`); users can rearrange it.
+
+| Widget | Shows |
+|---|---|
+| Search bar | catalog and docs search |
+| Welcome | the golden path in three steps, with *Create a service* |
+| Toolkit | Argo CD, Grafana, Prometheus, Alertmanager and the GitHub repo |
+| Starred / Recently / Most visited | the user's own shortcuts |
+| **Platform status** | every `platform-lab` component with its live Argo CD sync and health (through the Argo CD plugin's API and read-only token; no extra backend) |
+| **My services** | components owned by the signed-in user or their groups (`relations.ownedBy`) |
+
+The two custom widgets live in `packages/app/src/modules/home/`.
+
 ## Tear it down
 
 ```bash
