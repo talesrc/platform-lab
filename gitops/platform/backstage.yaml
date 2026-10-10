@@ -26,7 +26,7 @@ spec:
           image:
             registry: ghcr.io
             repository: talesrc/platform-lab-backstage
-            tag: sha-777adf7
+            tag: sha-ab26643
           # Same as the image's CMD; the chart appends its (empty) generated config last.
           args:
             - --config
