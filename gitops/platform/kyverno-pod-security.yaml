@@ -35,6 +35,8 @@ spec:
             - platform-gateway
             - monitoring
             - cnpg-system
+            - vault
+            - external-secrets
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno

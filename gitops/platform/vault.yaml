@@ -1,0 +1,97 @@
+# HashiCorp Vault: the lab's secret store. External Secrets Operator syncs its secrets into
+# Kubernetes Secrets (gitops/platform/platform-secrets.yaml); Terraform configures it
+# (terraform/platform-access). Single node, integrated Raft storage on a PVC.
+#
+# Wave -1, before the gateway (its HTTPRoute needs the vault Service). A sealed or
+# uninitialized Vault still reports Ready (readiness path below), so it never blocks later
+# waves; the lab-only unseal CronJob (gitops/manifests/vault) initializes and unseals it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://helm.releases.hashicorp.com
+      chart: vault
+      targetRevision: 0.34.1
+      helm:
+        # The chart's Helm test pod would otherwise run as a regular workload.
+        skipTests: true
+        valuesObject:
+          # The agent injector isn't used: pods get secrets as plain Secrets through ESO.
+          injector:
+            enabled: false
+          server:
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 256Mi
+            # Ready while sealed or uninitialized (204 instead of 503/501): Argo CD then reports
+            # the app Healthy, so later sync waves aren't blocked until Vault is unsealed.
+            readinessProbe:
+              enabled: true
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+            dataStorage:
+              enabled: true
+              size: 1Gi
+            # Lets Vault's Kubernetes auth method review the service-account tokens that
+            # External Secrets presents (system:auth-delegator).
+            authDelegator:
+              enabled: true
+            standalone:
+              enabled: true
+              config: |-
+                ui = true
+
+                # Required explicitly since Vault 1.20 (it refuses to start otherwise).
+                # HashiCorp recommends disabling mlock with Integrated Storage: mlock can make
+                # Raft run out of memory. The trade-off (secrets could reach swap) is moot on
+                # nodes without swap, like the kind nodes.
+                disable_mlock = true
+
+                listener "tcp" {
+                  # TLS terminates at the platform gateway; in-cluster traffic is plain HTTP.
+                  tls_disable     = 1
+                  address         = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                }
+
+                # Integrated storage (Raft), single node: HashiCorp's recommended storage
+                # (snapshots, no external dependency) instead of the chart's file backend.
+                storage "raft" {
+                  path = "/vault/data"
+                }
+
+                # No `seal` stanza: Shamir unseal keys, handled by the lab-only CronJob. In
+                # production an auto-unseal seal (cloud KMS, HSM or Transit) goes here.
+
+                service_registration "kubernetes" {}
+          ui:
+            enabled: true
+    # Lab-only init/unseal CronJob (see gitops/manifests/vault for the security trade-off).
+    - repoURL: https://github.com/talesrc/platform-lab.git
+      targetRevision: main
+      path: gitops/manifests/vault
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

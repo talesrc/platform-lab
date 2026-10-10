@@ -1,0 +1,154 @@
+# LAB-ONLY Vault init + unseal.
+#
+# Vault starts sealed after every restart and needs its unseal key. Production setups use
+# auto-unseal (a `seal` stanza: cloud KMS, HSM or another Vault's Transit engine), so no
+# human or job ever holds the key. A local kind lab has none of those, so this CronJob:
+#   - initializes Vault once (1 key share, threshold 1) and stores the unseal key and the
+#     root token in the Secret vault/vault-unseal-keys;
+#   - unseals Vault whenever it finds it sealed (checks every minute).
+#
+# Trade-off: anyone who can read that Secret owns Vault. Acceptable for a single-user lab,
+# never for production (where the root token is also revoked after setup). One key share:
+# with no separate key holders, more shares stored side by side add nothing.
+# Idempotent: an initialized, unsealed Vault is left alone.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-unseal
+  namespace: vault
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vault-unseal
+  namespace: vault
+rules:
+  # Create can't be limited by name; read/update only the keys Secret.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [vault-unseal-keys]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vault-unseal
+  namespace: vault
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vault-unseal
+subjects:
+  - kind: ServiceAccount
+    name: vault-unseal
+    namespace: vault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-unseal
+  namespace: vault
+data:
+  unseal.sh: |
+    #!/bin/sh
+    # Initialize (once) and unseal Vault; see the header of gitops/manifests/vault/unseal.yaml.
+    set -eu
+
+    VAULT="http://vault.vault.svc:8200"
+    API="https://kubernetes.default.svc/api/v1/namespaces/vault/secrets"
+    SA=/var/run/secrets/kubernetes.io/serviceaccount
+    AUTH="Authorization: Bearer $(cat "$SA/token")"
+    SECRET=vault-unseal-keys
+
+    k8s() { curl -sS --cacert "$SA/ca.crt" -H "$AUTH" -H "Content-Type: application/json" "$@"; }
+    # Value of a JSON string field (the API responses here are flat enough for sed).
+    field() { sed -n "s/.*\"$1\": *\[* *\"\([^\"]*\)\".*/\1/p"; }
+
+    # 200 unsealed, 429 standby, 501 not initialized, 503 sealed, 000 not reachable yet.
+    status=$(curl -s -o /dev/null -w '%{http_code}' "$VAULT/v1/sys/health" || true)
+    echo "vault health: $status"
+
+    if [ "$status" = 501 ]; then
+      echo "initializing (1 key share, threshold 1)"
+      init=$(curl -sSf -X PUT -d '{"secret_shares":1,"secret_threshold":1}' "$VAULT/v1/sys/init")
+      key=$(printf '%s' "$init" | field keys_base64)
+      root=$(printf '%s' "$init" | field root_token)
+      body="{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"$SECRET\",\"namespace\":\"vault\",\"labels\":{\"app.kubernetes.io/name\":\"vault-unseal\"}},\"stringData\":{\"unseal-key\":\"$key\",\"root-token\":\"$root\"}}"
+      # Create, or replace a stale Secret left over from a wiped Vault (new PVC).
+      code=$(k8s -o /dev/null -w '%{http_code}' -X POST -d "$body" "$API")
+      if [ "$code" = 409 ]; then
+        code=$(k8s -o /dev/null -w '%{http_code}' -X PUT -d "$body" "$API/$SECRET")
+      fi
+      echo "stored $SECRET (HTTP $code)"
+      case "$code" in 200|201) ;; *) echo "could not store the keys" >&2; exit 1 ;; esac
+      status=503
+    fi
+
+    if [ "$status" = 503 ]; then
+      key=$(k8s "$API/$SECRET" | field unseal-key | base64 -d)
+      if [ -z "$key" ]; then
+        echo "Vault is sealed but $SECRET has no unseal key; unseal it manually" >&2
+        exit 1
+      fi
+      curl -sSf -o /dev/null -X PUT -d "{\"key\":\"$key\"}" "$VAULT/v1/sys/unseal"
+      echo "unsealed: $(curl -s -o /dev/null -w '%{http_code}' "$VAULT/v1/sys/health")"
+    fi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-unseal
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-unseal
+spec:
+  # Every minute: Vault is unsealed at most ~1 minute after a restart.
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 50
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 50
+      ttlSecondsAfterFinished: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vault-unseal
+        spec:
+          serviceAccountName: vault-unseal
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100 # curl_user in the image
+            runAsGroup: 101
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: unseal
+              image: curlimages/curl:8.17.0
+              command: [sh, /scripts/unseal.sh]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+          volumes:
+            - name: scripts
+              configMap:
+                name: vault-unseal

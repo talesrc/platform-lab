@@ -41,6 +41,12 @@ spec:
             hostname: backstage.lab.localhost
             service: backstage
             port: 7007
+          # Vault UI and API (the vault Service is created in wave -1, before this route).
+          - name: vault
+            namespace: vault
+            hostname: vault.lab.localhost
+            service: vault
+            port: 8200
   destination:
     server: https://kubernetes.default.svc
     namespace: platform-gateway

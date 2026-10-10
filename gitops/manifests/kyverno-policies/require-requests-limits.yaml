@@ -29,7 +29,7 @@ spec:
       expression: >-
         !(request.namespace in ['kube-system', 'kube-public', 'kube-node-lease',
         'local-path-storage', 'kyverno', 'argocd', 'cert-manager', 'envoy-gateway-system',
-        'platform-gateway', 'monitoring', 'cnpg-system'])
+        'platform-gateway', 'monitoring', 'cnpg-system', 'vault', 'external-secrets'])
   variables:
     - name: containers
       expression: >-
