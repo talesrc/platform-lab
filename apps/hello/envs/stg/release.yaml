@@ -5,7 +5,9 @@ app:
   image:
     tag: "6.15.0"
   # Env vars that belong to this version and are the same in every environment.
-  env: {}
+  env:
+    PODINFO_UI_COLOR: "#2b6cb0"
 # Env vars this version needs from each environment (envs/<env>/values.yaml or the shared
 # values.yaml); CI and the promote template refuse an environment that lacks one.
-requiredEnv: []
+requiredEnv:
+  - PODINFO_UI_MESSAGE
