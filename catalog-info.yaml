@@ -25,6 +25,8 @@ metadata:
   description: Local internal developer platform on kind, bootstrapped by Terraform and run by Argo CD.
   annotations:
     github.com/project-slug: talesrc/platform-lab
+    # Platform docs: mkdocs.yml + docs/ at the repository root (Docs tab).
+    backstage.io/techdocs-ref: dir:.
   links:
     - url: https://github.com/talesrc/platform-lab
       title: Repository
@@ -194,6 +196,8 @@ metadata:
   description: Reference application on the golden path (apps/podinfo).
   annotations:
     backstage.io/source-location: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
+    # Declared here, not in apps/podinfo, so `dir:.` would mean the repo root: point at its folder.
+    backstage.io/techdocs-ref: url:https://github.com/talesrc/platform-lab/tree/main/apps/podinfo
     backstage.io/kubernetes-namespace: app-podinfo
     backstage.io/kubernetes-label-selector: 'app.kubernetes.io/name=podinfo'
     argocd/app-name: podinfo

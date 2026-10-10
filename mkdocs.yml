@@ -1,0 +1,21 @@
+# Platform docs, rendered by Backstage TechDocs on the platform-lab System
+# (catalog-info.yaml: backstage.io/techdocs-ref: dir:.). Preview locally with
+#   pip install mkdocs-techdocs-core==1.7.1 && mkdocs serve
+site_name: platform-lab
+site_description: TALECO's local internal developer platform
+repo_url: https://github.com/talesrc/platform-lab
+edit_uri: edit/main/docs/
+
+nav:
+  - Overview: index.md
+  - Architecture: architecture.md
+  - Bring it up: bring-up.md
+  - GitOps and sync waves: gitops.md
+  - Apps and the golden path: apps.md
+  - Developer portal: portal.md
+  - Policies: policies.md
+  - Observability: observability.md
+  - CI and updates: ci.md
+
+plugins:
+  - techdocs-core

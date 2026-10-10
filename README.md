@@ -427,6 +427,22 @@ two-phase bootstrap or Vault-generated tokens.
    forgets its old Secret (`removed` block), configures Vault, writes the values, waits for
    the ExternalSecrets to be Ready and restarts Backstage.
 
+## Docs (TechDocs)
+
+The platform's docs live in [`docs/`](docs/) (`mkdocs.yml` at the root) and are rendered in
+Backstage on the `platform-lab` system's *Docs* tab: architecture, bring-up, GitOps and waves,
+apps and the golden path, the portal, policies, observability and CI. Every app has its own
+`mkdocs.yml` + `docs/` next to its `catalog-info.yaml`; the golden-path template generates them.
+
+| Piece | How |
+|---|---|
+| Reference | `backstage.io/techdocs-ref: dir:.` on the entity (`url:` for podinfo, which is declared in the root `catalog-info.yaml`) |
+| Build | Backstage's local generator (`techdocs.generator.runIn: local`): it fetches the sources from GitHub and runs mkdocs-techdocs-core, installed in the image (`/opt/mkdocs`, pinned in `backstage/app/packages/backend/techdocs-requirements.txt`), so no Docker-in-Docker |
+| Storage | local publisher on the pod's filesystem: sites are rebuilt on first view after a restart (production would use `builder: external`, build in CI and publish to object storage) |
+
+Preview locally: `pip install mkdocs-techdocs-core==1.7.1 && mkdocs serve` (from the directory
+with the `mkdocs.yml`).
+
 ## Tear it down
 
 ```bash
