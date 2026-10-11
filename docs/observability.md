@@ -53,12 +53,18 @@ The workbook's slowest alert (1x over 3 days) is left out: Prometheus keeps only
 every alert, they become Backstage notifications for the app's owners, and in stg they block
 promotion. An app with no requests has no burn rate (0 / 0) and never alerts.
 
+**Low traffic.** Each alert also needs at least `slo.minRequests` (100) requests in its long
+window (1h, 6h or 1d). Below that, one failed request is a large share of a handful and not
+a trend: in a quiet stg it would page the owners and block promotion. Set `minRequests: 0`
+to alert on any traffic.
+
 **Recorded series** (labels `namespace`, `job` = app name, `slo`):
 
 | Series | Meaning |
 |---|---|
 | `slo:sli_error:ratio_rate5m` … `_rate1d` | share of bad requests over 5m, 30m, 1h, 2h, 6h, 1d |
 | `slo:error_budget:ratio` | 1 − objective |
+| `slo:sli_requests:rate5m` … `_rate1d` | requests per second that count (no `slo` label) |
 
 So the burn rate of every SLO, e.g. in Prometheus or Grafana, is:
 
@@ -67,7 +73,8 @@ slo:sli_error:ratio_rate1h / on (namespace, job, slo) slo:error_budget:ratio
 ```
 
 **Promotion** reads the same series: *Promote to prd* refuses while an SLO in stg burned
-faster than `platformLab.promotion.stgMaxBurnRate` (1) over the last 30 minutes. Burn-rate
+faster than `platformLab.promotion.stgMaxBurnRate` (1) over the last 30 minutes, unless stg
+had fewer than `platformLab.promotion.stgMinRequests` (100) requests in them. Burn-rate
 alerts need an hour of data, longer than the 10-minute soak, so this check catches a bad
 release sooner.
 

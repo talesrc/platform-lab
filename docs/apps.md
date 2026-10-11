@@ -57,7 +57,8 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
    `<name>-stg` is Synced, Healthy and on the release's image, and was deployed at least 10
    minutes ago (`platformLab.promotion.stgSoakMinutes`); in Prometheus, no
    [SLO](observability.md#slos) in stg burned its error budget faster than 1x over the last
-   30 minutes (`stgMaxBurnRate`); in Alertmanager, no warning or critical alert is firing in
+   30 minutes (`stgMaxBurnRate`; skipped with fewer than `stgMinRequests` requests, too few to
+   judge); in Alertmanager, no warning or critical alert is firing in
    `app-<name>-stg`. It also checks that prd's Vault has every secret the release reads (see
    [Secrets](#secrets)) and stops, naming them, if one is missing. Then it copies
    `envs/stg/release.yaml` to

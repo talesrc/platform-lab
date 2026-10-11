@@ -7,7 +7,9 @@
  * - Prometheus: over the last 30 minutes, stg spends none of its SLOs' error budgets faster
  *   than `maxBurnRate` (the golden-path chart's slo:* rules, charts/app/templates/slo.yaml).
  *   Burn rate = share of bad requests / error budget; 1 spends the budget exactly over 30
- *   days. No requests at all is no evidence either way and passes;
+ *   days. Fewer than `minRequests` requests in the window (none at all included) is no
+ *   evidence either way and passes: in a quiet stg one failed request out of a few would
+ *   otherwise block promotion;
  * - Alertmanager: no warning or critical alert is firing in namespace app-<app>-stg (which
  *   includes the SLO burn-rate alerts, and catches what SLOs don't, like crash loops).
  *
@@ -25,6 +27,8 @@ export type StgHealthOptions = {
   prometheusUrl?: string;
   /** Highest SLO burn rate over the last 30 minutes that still allows promotion (default 1). */
   maxBurnRate?: number;
+  /** Requests stg needs in those 30 minutes before its burn rate counts (default 100). */
+  minRequests?: number;
   /** Minimum time since stg's last deploy. */
   soakMinutes: number;
   fetch?: typeof fetch;
@@ -51,10 +55,16 @@ type PrometheusVector = {
   };
 };
 
-/** Burn rate per SLO in a namespace, from the golden-path chart's recording rules. */
-const burnRateQuery = (namespace: string) =>
-  `slo:sli_error:ratio_rate30m{namespace="${namespace}"}` +
-  ` / on (namespace, job, slo) slo:error_budget:ratio`;
+/**
+ * Burn rate per SLO in a namespace, from the golden-path chart's recording rules, leaving out
+ * apps with fewer than `minRequests` requests in the window. `unless` (not `and`) keeps the
+ * burn rate of an app whose chart predates slo:sli_requests: it is still checked, as before.
+ */
+export function burnRateQuery(namespace: string, minRequests: number) {
+  const burnRate = `slo:sli_error:ratio_rate30m{namespace="${namespace}"} / on (namespace, job, slo) slo:error_budget:ratio`;
+  if (minRequests <= 0) return burnRate;
+  return `${burnRate} unless on (namespace, job) slo:sli_requests:rate30m{namespace="${namespace}"} * 1800 < ${minRequests}`;
+}
 
 const BLOCKING_SEVERITIES = new Set(['critical', 'warning']);
 
@@ -81,6 +91,9 @@ export function stgHealthOptionsFromConfig(config: Config): StgHealthOptions {
     ),
     maxBurnRate: config.getOptionalNumber(
       'platformLab.promotion.stgMaxBurnRate',
+    ),
+    minRequests: config.getOptionalNumber(
+      'platformLab.promotion.stgMinRequests',
     ),
     soakMinutes:
       config.getOptionalNumber('platformLab.promotion.stgSoakMinutes') ?? 10,
@@ -151,7 +164,9 @@ export async function checkStgHealth(
 
   if (options.prometheusUrl) {
     const maxBurnRate = options.maxBurnRate ?? 1;
-    const query = encodeURIComponent(burnRateQuery(`app-${name}`));
+    const query = encodeURIComponent(
+      burnRateQuery(`app-${name}`, options.minRequests ?? 100),
+    );
     try {
       const { data } = await getJson<PrometheusVector>(
         fetchImpl,
