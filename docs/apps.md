@@ -10,7 +10,7 @@ apps/<name>/
   values.yaml         # shared by every environment, under `app:` - image repository, port, probes
   envs/stg/, envs/prd/
     values.yaml       # environment config: what differs between environments (URLs, replicas)
-    release.yaml      # the release: image tag, its env vars and requiredEnv (promoted stg -> prd)
+    release.yaml      # the release: image tag, its env vars, secretEnv and requiredEnv (promoted stg -> prd)
   Chart.lock          # resolved dependency digest (helm dependency update)
   catalog-info.yaml   # the Backstage entity
   mkdocs.yml, docs/   # the app's docs (TechDocs)
@@ -56,7 +56,9 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
    service's *Releases* card). First it checks that stg runs the release well: in Argo CD,
    `<name>-stg` is Synced, Healthy and on the release's image, and was deployed at least 10
    minutes ago (`platformLab.promotion.stgSoakMinutes`); in Alertmanager, no warning or
-   critical alert is firing in `app-<name>-stg`. Then it copies `envs/stg/release.yaml` to
+   critical alert is firing in `app-<name>-stg`. It also checks that prd's Vault has every
+   secret the release reads (see [Secrets](#secrets)) and stops, naming them, if one is
+   missing. Then it copies `envs/stg/release.yaml` to
    `envs/prd/release.yaml`, asks for prd's value of any required env var prd doesn't set yet
    (and stops, naming them, if one is missing), removes from `envs/prd/values.yaml` the env
    vars the new release no longer requires (or now sets itself), and opens the pull request.
@@ -68,16 +70,19 @@ and opens the pull request. It leaves stg and prd's environment config alone; fi
 in stg, then promote again.
 
 **What runs where:** the *Releases* card on a service's page shows, per environment, the image
-Argo CD runs, its sync and health, and when it was last deployed. The *prd keeps up with stg*
-scorecard check fails when stg has had a different release for more than 14 days.
+Argo CD runs, its sync and health, when it was last deployed, and the state of each secret. The
+*prd keeps up with stg* scorecard check fails when stg has had a different release for more than
+14 days.
 
 CI (`scripts/ci/check-app-envs.py`) enforces the same rules on every pull request, however it
 was written:
 
 | Rule | Why |
 |---|---|
-| `release.yaml` holds only `app.image.tag`, `app.env`, `requiredEnv` | anything else is environment config and must not travel with promotion |
+| `release.yaml` holds only `app.image.tag`, `app.env`, `app.secretEnv`, `app.generatedSecretEnv`, `requiredEnv` | anything else is environment config and must not travel with promotion |
 | an env var is in a release or in environment config, not both | otherwise it's unclear which wins after a promotion |
+| an env var is plain, from Vault or generated, not more than one | one source per value |
+| no plain env var is named like a secret (`*PASSWORD*`, `*TOKEN*`, `*SECRET*`, `*API_KEY*`, ...) | the repository is public: secrets go in `secretEnv` |
 | every `requiredEnv` name is set in that environment | prd can't start a version whose config is missing |
 | a changed `envs/prd/release.yaml` equals `envs/stg/release.yaml`, or a release prd ran before | prd only runs what ran in stg (or a rollback); a hotfix changes both files in one pull request |
 | a `# renovate:` comment names the app's image repository | Renovate would otherwise bump the tag from another image |
@@ -85,11 +90,63 @@ was written:
 Good practice for teams: give new settings sensible defaults in the code, so most new versions
 need no new config and promotion is just the tag.
 
+## Secrets
+
+This repository is public, so secret values never go in git, nor in template parameters
+(the scaffolder keeps them in its task history), pull request descriptions or notifications.
+Values live in Vault; git and the portal hold only their **names**.
+
+```yaml
+# envs/<env>/release.yaml - the secrets this version reads, promoted with it
+app:
+  secretEnv: [PAYMENTS_API_KEY, DB_PASSWORD]
+# values.yaml - random values nobody needs to know
+app:
+  generatedSecretEnv:
+    SESSION_KEY: { length: 48 }   # length, digits, symbols: an External Secrets Password generator
+```
+
+**What the platform sets up:**
+
+- **Vault paths:** each env var in `secretEnv` is one Vault secret,
+  `secret/apps/<name>/<env>/<ENV_VAR>`, with the value in the field `value`.
+- **Sync:** the chart renders an ExternalSecret `<name>-secrets` that reads those paths through
+  the `vault-apps` ClusterSecretStore into the Secret `<name>-secrets`; the container gets each
+  env var through `secretKeyRef`. A Kyverno policy (`restrict-app-externalsecrets`, blocking)
+  only admits ExternalSecrets in `app-<name>-<env>` that read `apps/<name>/<env>/`.
+- **Owner access:** `terraform/platform-access` gives each owner (`spec.owner` in
+  `catalog-info.yaml`) a Vault policy and group, `owner-<kind>-<name>`, that may write and
+  delete its apps' values and see their versions, but not read values back. Re-apply it after
+  adding an app.
+- **Checks:** promotion refuses prd while one of the release's secrets is missing there. The
+  *Releases* card lists each secret per environment (present with version and age, missing,
+  deleted or generated) and links to it in Vault. Backstage reads only Vault **metadata**
+  (`secret/metadata/apps/*`): it can't read a value. Two scorecard checks: *Secrets in Vault*
+  (none missing) and *Secrets rotated in 90 days*.
+
+**Writing a value** (as the owner; the lab's only Vault login today is the root token, see
+`terraform output vault_url`):
+
+```bash
+vault kv put -mount=secret apps/payments/stg/PAYMENTS_API_KEY value=-   # reads the value from stdin
+vault kv put -mount=secret apps/payments/prd/PAYMENTS_API_KEY value=-
+```
+
+External Secrets picks it up within 5 minutes (`secrets.refreshInterval`). Env vars are read at
+start-up, so restart the app after **rotating** a value:
+`kubectl -n app-<name>-<env> rollout restart deployment/<name>`.
+
+**Where values should come from**, best first: generated (`generatedSecretEnv`; rotate by
+deleting the Secret `<name>-generated` and restarting); typed into Vault by an owner, for
+third-party keys; a Backstage form that writes to Vault only if people can't get a Vault login,
+since it would make Backstage a privileged writer of every app's secrets. Short-lived database
+credentials from Vault's database engine are a later step.
+
 ## What the chart gives you
 
 | | |
 |---|---|
-| Manifests | Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (when `replicas > 1`) |
+| Manifests | Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (when `replicas > 1`), ExternalSecrets and Password generators (when the app has secrets) |
 | Security | non-root (UID 65532), read-only root filesystem (writable `emptyDir`s via `writablePaths`), no service-account token, all capabilities dropped, seccomp `RuntimeDefault` |
 | Resources | requests and a memory limit, `/readyz` and `/healthz` probes |
 | Validation | `values.schema.json` rejects bad values (e.g. a missing or `latest` image tag) before anything renders |

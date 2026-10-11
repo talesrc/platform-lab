@@ -24,7 +24,13 @@ Each component's page shows its live state, selected by annotations in its `cata
 
 Each integration uses least-privilege access: the Kubernetes plugin uses the pod's service
 account with a read-only ClusterRole (no Secrets); Argo CD a `role:readonly` API token; Grafana a
-Viewer token added by Backstage's proxy, so it never reaches the browser.
+Viewer token added by Backstage's proxy, so it never reaches the browser; Vault the `backstage`
+Kubernetes-auth role, which reads only the metadata of app secrets (`secret/metadata/apps/*`:
+exists, version, last written), never a value. Its login token is a service-account token for the
+`vault` audience, projected into the pod.
+
+Golden-path services also get a *Releases* card: per environment, the running image, sync and
+health, the last deploy, and each secret's state (see [Apps: Secrets](apps.md#secrets)).
 
 ## Docs (TechDocs)
 
