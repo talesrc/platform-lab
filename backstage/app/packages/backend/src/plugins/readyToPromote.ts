@@ -7,11 +7,14 @@
  * - prd is behind stg: envs/prd/release.yaml is another release than envs/stg/release.yaml
  *   (the "prd keeps up with stg" check, techInsightsPlatformLab.ts);
  * - stg runs that release well: the same check as platform-lab:app:promote before it opens a
- *   pull request (stgHealth.ts: Synced, Healthy, on the release's image, soaked, no alerts).
+ *   pull request (stgHealth.ts: Synced, Healthy, on the release's image, soaked, no alerts);
+ * - prd's Vault has the secrets the release needs, also as promotion checks (vaultSecrets.ts,
+ *   metadata only). If some are missing the owner is told which, with a link to Vault, since
+ *   promotion would refuse; once they are written, the "ready" notification follows.
  *
- * The owner is notified once per stg release: what was notified is kept in this plugin's
- * database, since sending again with the same notification scope would mark it unread. A newer
- * stg release replaces the older notification (same scope per app).
+ * The owner is notified once per stg release and secrets state: what was notified is kept in
+ * this plugin's database, since sending again with the same notification scope would mark it
+ * unread. A newer notification replaces the older one (same scope per app).
  */
 import {
   coreServices,
@@ -25,9 +28,19 @@ import { catalogServiceRef } from '@backstage/plugin-catalog-node';
 import { notificationService } from '@backstage/plugin-notifications-node';
 import { createHash } from 'node:crypto';
 import { parse as parseYaml } from 'yaml';
-import { imageOf, sameRelease, type Values } from './releases';
+import {
+  imageOf,
+  sameRelease,
+  vaultSecretNames,
+  type Values,
+} from './releases';
 import { checkStgHealth, stgHealthOptionsFromConfig } from './stgHealth';
 import { GOLDEN_PATH_SOURCE } from './techInsightsPlatformLab';
+import {
+  VaultMetadataClient,
+  secretsUiUrl,
+  vaultOptionsFromConfig,
+} from './vaultSecrets';
 
 /** A golden-path app, from its Component's backstage.io/source-location. */
 export type GoldenPathApp = {
@@ -43,11 +56,22 @@ export type GoldenPathApp = {
 /** The key of the stg release an app's owner was last told about. */
 export type LastNotified = (app: string) => Promise<string | undefined>;
 
+/**
+ * Which of `names` prd's Vault lacks (missing or deleted), or undefined when that can't be
+ * told (Vault unreadable or not configured): the app is then retried on the next run.
+ */
+export type CheckPrdSecrets = (
+  app: string,
+  names: string[],
+) => Promise<string[] | undefined>;
+
 export type ReadyRelease = {
   app: GoldenPathApp;
   stgTag: string;
   prdTag?: string;
   releaseKey: string;
+  /** Secrets the release needs that prd's Vault lacks: write them before promoting. */
+  missingSecrets?: string[];
 };
 
 /** JSON with sorted keys, so equal releases (sameRelease) get the same key. */
@@ -78,31 +102,54 @@ export const promoteLink = (entityRef: string) =>
   )}`;
 
 /**
- * The stg releases that are ready for prd and that the owner wasn't told about yet. Unreadable
- * release files and stg checks that can't be made count as "not ready": the next run retries.
+ * The stg releases that are ready for prd (or would be, once prd has their secrets) and that
+ * the owner wasn't told about yet. Unreadable release files, and stg or Vault checks that
+ * can't be made, count as "not ready": the next run retries.
  */
 export async function findReadyReleases(options: {
   apps: GoldenPathApp[];
   readValues: (url: string) => Promise<Values | undefined>;
   checkStg: (app: string, image: string | undefined) => Promise<string[]>;
+  /** Without it, secrets aren't checked (as before Vault held app secrets). */
+  checkPrdSecrets?: CheckPrdSecrets;
   lastNotified: LastNotified;
   logger: LoggerService;
 }): Promise<ReadyRelease[]> {
-  const { readValues, checkStg, lastNotified, logger } = options;
+  const { readValues, checkStg, checkPrdSecrets, lastNotified, logger } =
+    options;
   const ready: ReadyRelease[] = [];
 
   for (const app of options.apps) {
     const file = (name: string) =>
       `${app.repo}/blob/${app.ref}/${app.appDir}/${name}`;
-    const [shared, stg, prd] = await Promise.all(
-      ['values.yaml', 'envs/stg/release.yaml', 'envs/prd/release.yaml'].map(
-        name => readValues(file(name)),
-      ),
+    const [shared, stg, prd, prdValues] = await Promise.all(
+      [
+        'values.yaml',
+        'envs/stg/release.yaml',
+        'envs/prd/release.yaml',
+        'envs/prd/values.yaml',
+      ].map(name => readValues(file(name))),
     );
     const stgTag = stg?.app?.image?.tag;
     if (!stg || !prd || !stgTag || sameRelease(stg, prd)) continue;
 
-    const key = releaseKey(stg);
+    // The secrets prd needs to run stg's release, as promotion computes them
+    // (environmentSecrets in releases.ts).
+    const names = vaultSecretNames(shared, prdValues, stg);
+    let missingSecrets: string[] = [];
+    if (names.length && checkPrdSecrets) {
+      const missing = await checkPrdSecrets(app.name, names);
+      if (!missing) {
+        logger.debug(`${app.name}: prd's secrets can't be checked; retrying`);
+        continue;
+      }
+      missingSecrets = missing;
+    }
+
+    // Missing secrets are part of the key: writing them changes it, so "ready" follows.
+    const key = missingSecrets.length
+      ? `${releaseKey(stg)}:needs:${missingSecrets.join(',')}`
+      : releaseKey(stg);
     if ((await lastNotified(app.name)) === key) continue;
 
     const problems = await checkStg(app.name, imageOf(shared, stg));
@@ -114,9 +161,66 @@ export async function findReadyReleases(options: {
       );
       continue;
     }
-    ready.push({ app, stgTag, prdTag: prd.app?.image?.tag, releaseKey: key });
+    ready.push({
+      app,
+      stgTag,
+      prdTag: prd.app?.image?.tag,
+      releaseKey: key,
+      ...(missingSecrets.length ? { missingSecrets } : {}),
+    });
   }
   return ready;
+}
+
+/** Checks prd's secrets in Vault's metadata (never values); undefined when Vault can't tell. */
+export function vaultPrdSecretsChecker(
+  client: VaultMetadataClient,
+): CheckPrdSecrets {
+  return async (app, names) => {
+    try {
+      const states = await Promise.all(
+        names.map(name => client.state(app, 'prd', name)),
+      );
+      return states.filter(s => s.status !== 'present').map(s => s.name);
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+/** The notification for a ready release; `vaultUi` links prd's secrets when some are missing. */
+export function readyNotification(
+  release: ReadyRelease,
+  soakMinutes: number,
+  vaultUi?: string,
+) {
+  const { app, stgTag, prdTag, missingSecrets } = release;
+  const stgPassed = `stg has run ${stgTag} for at least ${soakMinutes} min: Synced, Healthy, no alerts.`;
+  const scope = `ready-to-promote:${app.entityRef}`;
+  if (missingSecrets?.length) {
+    return {
+      title: `${app.name} ${stgTag} passes stg, but prd lacks secrets`,
+      description:
+        `${stgPassed} Promotion would refuse until prd's Vault has ${missingSecrets.join(
+          ', ',
+        )}. ` + `Write them there; you'll be told when it's ready to promote.`,
+      link: vaultUi ?? promoteLink(app.entityRef),
+      severity: 'normal' as const,
+      topic: 'releases',
+      scope,
+    };
+  }
+  return {
+    title: `${app.name} ${stgTag} is ready to promote to prd`,
+    description:
+      `${stgPassed} prd runs ${prdTag ?? 'another release'}. ` +
+      `Open the form to review the release and open the pull request.`,
+    link: promoteLink(app.entityRef),
+    severity: 'normal' as const,
+    topic: 'releases',
+    // Same scope: a newer notification for this app replaces this one.
+    scope,
+  };
 }
 
 /** Golden-path apps in the catalog: Components with argocd/app-selector and source in apps/. */
@@ -226,6 +330,13 @@ export default createBackendPlugin({
           await database.getClient(),
         );
 
+        // Without platformLab.vault (local development) secrets aren't checked; promotion
+        // still checks them.
+        const vaultOptions = vaultOptionsFromConfig(config);
+        const checkPrdSecrets =
+          vaultOptions &&
+          vaultPrdSecretsChecker(new VaultMetadataClient(vaultOptions));
+
         async function readValues(url: string) {
           try {
             const response = await urlReader.readUrl(url);
@@ -263,32 +374,31 @@ export default createBackendPlugin({
               apps: goldenPathApps(items),
               readValues,
               checkStg: (app, image) => checkStgHealth(app, image, stgOptions),
+              checkPrdSecrets,
               lastNotified,
               logger,
             });
 
             for (const release of ready) {
-              const { app, stgTag, prdTag } = release;
+              const { app, stgTag, missingSecrets } = release;
               try {
                 await notifications.send({
                   recipients: { type: 'entity', entityRef: app.entityRef },
-                  payload: {
-                    title: `${app.name} ${stgTag} is ready to promote to prd`,
-                    description:
-                      `stg has run ${stgTag} for at least ${stgOptions.soakMinutes} min: ` +
-                      `Synced, Healthy, no alerts. prd runs ${
-                        prdTag ?? 'another release'
-                      }. Open the form to review the release and open the pull request.`,
-                    link: promoteLink(app.entityRef),
-                    severity: 'normal',
-                    topic: 'releases',
-                    // Same scope: a newer stg release replaces this notification.
-                    scope: `ready-to-promote:${app.entityRef}`,
-                  },
+                  payload: readyNotification(
+                    release,
+                    stgOptions.soakMinutes,
+                    vaultOptions && secretsUiUrl(vaultOptions, app.name, 'prd'),
+                  ),
                 });
                 await markNotified(release);
                 logger.info(
-                  `Notified the owner of ${app.name} that ${stgTag} is ready for prd`,
+                  missingSecrets?.length
+                    ? `Notified the owner of ${
+                        app.name
+                      } that ${stgTag} needs ${missingSecrets.join(
+                        ', ',
+                      )} in prd`
+                    : `Notified the owner of ${app.name} that ${stgTag} is ready for prd`,
                 );
               } catch (error) {
                 logger.error(

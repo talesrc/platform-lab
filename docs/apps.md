@@ -66,8 +66,11 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
    vars the new release no longer requires (or now sets itself), and opens the pull request.
    You don't have to remember to do this: every 5 minutes Backstage runs the same stg check
    for each service whose prd is behind stg, and once it passes it notifies the owner,
-   *hello 6.16.0 is ready to promote to prd*, linking to the prefilled form. That happens
-   once per stg release (a newer stg release replaces the notification); Backstage keeps
+   *hello 6.16.0 is ready to promote to prd*, linking to the prefilled form. If prd's Vault
+   lacks a [secret](#secrets) the release needs, the notification says which instead
+   (*hello 6.16.0 passes stg, but prd lacks secrets*) and links to prd's secrets in Vault;
+   once they are written, the "ready" notification replaces it. That happens once per stg
+   release and secrets state (a newer one replaces the notification); Backstage keeps
    track of what it sent in its `ready-to-promote` database schema. Set
    `platformLab.promotion.readyNotification` to change the interval or turn it off.
 3. **Merge:** Argo CD deploys prd and notifies the owner.
