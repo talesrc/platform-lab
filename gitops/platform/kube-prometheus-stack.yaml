@@ -74,12 +74,25 @@ spec:
 
         alertmanager:
           # Alerts become Backstage notifications for the team owning the namespace
-          # (backstage/app/packages/backend/src/plugins/alertmanager.ts). Merged into the
-          # chart's config: its inhibit rules and Watchdog -> "null" route stay; `receivers`
-          # is a list, so it is replaced and must keep "null".
+          # (backstage/app/packages/backend/src/plugins/alertmanager.ts); critical alerts in prd
+          # also go to the DORA metrics as failures (plugins/dora/signals.ts). Merged into the
+          # chart's config: its inhibit rules stay; `routes` and `receivers` are lists, so they
+          # are replaced and must keep the chart's Watchdog -> "null" route and "null" receiver.
           config:
             route:
               receiver: backstage
+              routes:
+                - receiver: "null"
+                  matchers:
+                    - alertname = "Watchdog"
+                # `continue`: these alerts still reach the owner through the next route.
+                - receiver: dora
+                  matchers:
+                    - namespace =~ "app-.+-prd"
+                    - severity = "critical"
+                  continue: true
+                # A matching child route replaces the parent's receiver, so say it again.
+                - receiver: backstage
             receivers:
               - name: "null"
               - name: backstage
@@ -90,6 +103,15 @@ spec:
                       authorization:
                         type: Bearer
                         # Secret alertmanager-backstage (terraform/platform-addons), mounted below.
+                        credentials_file: /etc/alertmanager/secrets/alertmanager-backstage/token
+              - name: dora
+                webhook_configs:
+                  - url: http://backstage.backstage.svc:7007/api/dora/alerts
+                    send_resolved: true
+                    http_config:
+                      authorization:
+                        type: Bearer
+                        # Same token: Backstage allows it for the dora plugin too.
                         credentials_file: /etc/alertmanager/secrets/alertmanager-backstage/token
           alertmanagerSpec:
             externalUrl: https://alertmanager.lab.localhost

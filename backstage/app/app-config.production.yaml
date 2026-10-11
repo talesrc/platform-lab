@@ -40,13 +40,17 @@ backend:
           subject: argocd-notifications
         accessRestrictions:
           - plugin: notifications
-      # Alertmanager -> POST /api/alertmanager/webhook (packages/backend/src/plugins).
+          # ... and POST /api/dora/deploys (prd deploys, packages/backend/src/plugins/dora).
+          - plugin: dora
+      # Alertmanager -> POST /api/alertmanager/webhook (packages/backend/src/plugins), and
+      # POST /api/dora/alerts (prd failures for the DORA metrics).
       - type: static
         options:
           token: ${ALERTMANAGER_TOKEN}
           subject: alertmanager
         accessRestrictions:
           - plugin: alertmanager
+          - plugin: dora
 
 integrations:
   github:
@@ -173,6 +177,11 @@ techInsights:
     appSecretsFactRetriever:
       cadence: '30 * * * *'
       lifecycle: { timeToLive: { weeks: 2 } }
+    # packages/backend/src/plugins/dora/techInsights.ts: DORA metrics over 30 days, kept a
+    # year so the trend is visible.
+    doraFactRetriever:
+      cadence: '15 */6 * * *'
+      lifecycle: { timeToLive: { weeks: 52 } }
   factChecker:
     checks:
       ownedByTeam:
