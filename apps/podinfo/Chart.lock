@@ -1,6 +1,6 @@
 dependencies:
 - name: app
   repository: oci://ghcr.io/talesrc/charts
-  version: 0.1.0
-digest: sha256:9363fe0fcedfd7537bb6e3fbbcc227756ebc38c5f5e29e6464d611f7f6444d6c
-generated: "2026-10-09T23:27:18.072660492+01:00"
+  version: 0.3.0
+digest: sha256:b3e8709c9416e36874925b192a90b656801aa1302b59a133f7fcbccf8da5a56d
+generated: "2026-10-11T11:42:34.107705334Z"
