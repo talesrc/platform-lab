@@ -7,10 +7,20 @@ function options(
   app: Record<string, unknown>,
   alerts: Array<Record<string, string>> = [],
   extra: Partial<StgHealthOptions> = {},
+  burnRates: Record<string, string> = {},
 ): StgHealthOptions & { fetch: jest.Mock } {
   const fetchMock = jest.fn(async (url: string) => {
     if (url.startsWith('http://argocd')) {
       return new Response(JSON.stringify({ status: app }), { status: 200 });
+    }
+    if (url.startsWith('http://prometheus')) {
+      const result = Object.entries(burnRates).map(([slo, value]) => ({
+        metric: { namespace: 'app-hello-stg', job: 'hello', slo },
+        value: [NOW.getTime() / 1000, value],
+      }));
+      return new Response(JSON.stringify({ data: { result } }), {
+        status: 200,
+      });
     }
     return new Response(JSON.stringify(alerts.map(labels => ({ labels }))), {
       status: 200,
@@ -70,8 +80,39 @@ describe('checkStgHealth', () => {
     ]);
   });
 
-  it('fails closed when Argo CD or Alertmanager cannot be read', async () => {
-    const opts = options(healthy);
+  it('blocks an SLO burning its error budget too fast, not one without traffic', async () => {
+    const opts = options(
+      healthy,
+      [],
+      { prometheusUrl: 'http://prometheus', maxBurnRate: 2 },
+      { availability: '20.04', latency: 'NaN' },
+    );
+
+    expect(await checkStgHealth('hello', IMAGE, opts)).toEqual([
+      'stg spends its availability error budget 20.0x as fast as the SLO allows ' +
+        'over the last 30 min (at most 2x to promote)',
+    ]);
+    expect(opts.fetch.mock.calls[1][0]).toBe(
+      `http://prometheus/api/v1/query?query=${encodeURIComponent(
+        'slo:sli_error:ratio_rate30m{namespace="app-hello-stg"}' +
+          ' / on (namespace, job, slo) slo:error_budget:ratio',
+      )}`,
+    );
+  });
+
+  it('passes SLOs within their budget, with a default limit of 1x', async () => {
+    const opts = options(
+      healthy,
+      [],
+      { prometheusUrl: 'http://prometheus' },
+      { availability: '0.5', latency: '1' },
+    );
+
+    expect(await checkStgHealth('hello', IMAGE, opts)).toEqual([]);
+  });
+
+  it('fails closed when Argo CD, Prometheus or Alertmanager cannot be read', async () => {
+    const opts = options(healthy, [], { prometheusUrl: 'http://prometheus' });
     opts.fetch.mockImplementation(
       async () =>
         new Response('nope', { status: 503, statusText: 'Unavailable' }),
@@ -79,8 +120,11 @@ describe('checkStgHealth', () => {
 
     const problems = await checkStgHealth('hello', IMAGE, opts);
 
-    expect(problems).toHaveLength(2);
+    expect(problems).toHaveLength(3);
     expect(problems[0]).toMatch(/could not read hello-stg from Argo CD/);
-    expect(problems[1]).toMatch(/could not read alerts for app-hello-stg/);
+    expect(problems[1]).toMatch(
+      /could not read SLO burn rates for app-hello-stg/,
+    );
+    expect(problems[2]).toMatch(/could not read alerts for app-hello-stg/);
   });
 });
