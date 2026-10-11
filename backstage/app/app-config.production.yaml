@@ -169,6 +169,10 @@ techInsights:
     platformLabFactRetriever:
       cadence: '0 * * * *'
       lifecycle: { timeToLive: { weeks: 2 } }
+    # packages/backend/src/plugins/appSecretsFacts.ts: Vault metadata of apps' secrets.
+    appSecretsFactRetriever:
+      cadence: '30 * * * *'
+      lifecycle: { timeToLive: { weeks: 2 } }
   factChecker:
     checks:
       ownedByTeam:
@@ -267,6 +271,38 @@ techInsights:
               - fact: usesLatestAppChart
                 operator: equal
                 value: true
+      secretsPresent:
+        type: json-rules-engine
+        name: Secrets in Vault
+        description: >-
+          Every secret stg and prd use (secretEnv) is in Vault at apps/<name>/<env>/<ENV_VAR>.
+          A missing one keeps the app from starting; the Releases card links to where to write it.
+        factIds: [appSecretsFactRetriever]
+        filter:
+          kind: component
+          spec.type: service
+        rule:
+          conditions:
+            all:
+              - fact: secretsMissing
+                operator: equal
+                value: 0
+      secretsRotated:
+        type: json-rules-engine
+        name: Secrets rotated in 90 days
+        description: >-
+          Every secret in use was written to Vault in the last 90 days. Rotate the oldest one
+          (the Releases card shows each secret's age), then restart the app to pick it up.
+        factIds: [appSecretsFactRetriever]
+        filter:
+          kind: component
+          spec.type: service
+        rule:
+          conditions:
+            all:
+              - fact: oldestSecretDays
+                operator: lessThanInclusive
+                value: 90
 
 # --- Releases -----------------------------------------------------------------------------
 # platform-lab:app:promote (packages/backend/src/plugins/scaffolderPromote.ts) checks stg
@@ -276,3 +312,13 @@ platformLab:
   promotion:
     stgSoakMinutes: 10
     alertmanagerUrl: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093
+  # App secrets (packages/backend/src/plugins/vaultSecrets.ts): Vault metadata only, through
+  # the `backstage` Kubernetes auth role (terraform/platform-access/app-secrets.tf) with the
+  # projected token from gitops/platform/backstage.yaml. Promotion refuses a release whose
+  # secrets prd lacks; the Releases card shows each secret per environment.
+  vault:
+    url: http://vault.vault.svc:8200
+    mount: secret
+    role: backstage
+    tokenPath: /var/run/secrets/vault/token
+    uiUrl: https://vault.lab.localhost

@@ -21,6 +21,8 @@ backend.add(
 );
 // platform-lab:app:promote, for the "Promote to prd" template (src/plugins/scaffolderPromote.ts).
 backend.add(import('./plugins/scaffolderPromote'));
+// Per-environment secret state of golden-path apps for the Releases card (src/plugins/appSecrets.ts).
+backend.add(import('./plugins/appSecrets'));
 
 // techdocs plugin
 backend.add(import('@backstage/plugin-techdocs-backend'));
@@ -54,6 +56,8 @@ backend.add(
   import('@backstage-community/plugin-tech-insights-backend-module-jsonfc'),
 );
 backend.add(import('./plugins/techInsightsPlatformLab'));
+// Secret facts of golden-path apps from Vault's metadata (src/plugins/appSecretsFacts.ts).
+backend.add(import('./plugins/appSecretsFacts'));
 // Kyverno policy results per entity, from Policy Reporter (gitops/platform/policy-reporter.yaml).
 backend.add(import('@kyverno/backstage-plugin-policy-reporter-backend'));
 // --- end Standards ----------------------------------------------------------------------

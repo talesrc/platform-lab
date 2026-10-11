@@ -21,3 +21,11 @@ app:
       memory: ${{ values.memoryRequest }}
     limits:
       memory: ${{ values.memoryLimit }}
+{%- if values.generatedSecretEnv | length %}
+  # Random values External Secrets generates once in each environment; nobody types or sees
+  # them. Rotate one by deleting the Secret ${{ values.name }}-generated, then restart.
+  generatedSecretEnv:
+{%- for name in values.generatedSecretEnv %}
+    ${{ name }}: {}
+{%- endfor %}
+{%- endif %}

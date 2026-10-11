@@ -88,6 +88,32 @@ spec:
           title: Memory limit
           type: string
           default: 128Mi
+    # Names only: values never pass through this form (the scaffolder keeps task parameters).
+    - title: Secrets
+      properties:
+        secretEnv:
+          title: Secrets from Vault
+          description: >-
+            Env vars whose values you write in Vault yourself, e.g. third-party API keys. Each
+            one is read from apps/<name>/<env>/<ENV_VAR> (field `value`) in stg and prd; the
+            app starts once they are there. Names only, never values.
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            type: string
+            pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
+        generatedSecretEnv:
+          title: Generated secrets
+          description: >-
+            Env vars with random values (session or signing keys) that External Secrets
+            generates once per environment; nobody types or sees them.
+          type: array
+          uniqueItems: true
+          default: []
+          items:
+            type: string
+            pattern: "^[A-Za-z_][A-Za-z0-9_]*$"
 
   steps:
     - id: fetch
@@ -99,7 +125,7 @@ spec:
         values:
           name: ${{ parameters.name }}
           # Version of charts/app (oci://ghcr.io/talesrc/charts/app) new apps start on.
-          chartVersion: 0.1.0
+          chartVersion: 0.2.0
           description: ${{ parameters.description }}
           owner: ${{ parameters.owner }}
           image: ${{ parameters.image }}
@@ -112,6 +138,8 @@ spec:
           cpuRequest: ${{ parameters.cpuRequest }}
           memoryRequest: ${{ parameters.memoryRequest }}
           memoryLimit: ${{ parameters.memoryLimit }}
+          secretEnv: ${{ parameters.secretEnv }}
+          generatedSecretEnv: ${{ parameters.generatedSecretEnv }}
 
     - id: publish
       name: Open pull request
@@ -128,6 +156,15 @@ spec:
           `app-${{ parameters.name }}-stg`, https://${{ parameters.name }}-stg.apps.lab.localhost)
           and prd (namespace `app-${{ parameters.name }}-prd`,
           https://${{ parameters.name }}.apps.lab.localhost).
+          {% if parameters.secretEnv | length %}
+          Secrets to write in Vault before the app can start (field `value`, never in git):
+          {%- for name in parameters.secretEnv %}
+          - `apps/${{ parameters.name }}/stg/${{ name }}` and `apps/${{ parameters.name }}/prd/${{ name }}`
+          {%- endfor %}
+
+          After merging, re-apply `terraform/platform-access` so the owner's Vault policy covers
+          `apps/${{ parameters.name }}/`.
+          {% endif %}
 
     # Keeps the PR link in the creator's notifications after they leave this page. Argo CD
     # notifies the owner again once the merged app is deployed (gitops/manifests/app-tenancy).
@@ -153,3 +190,5 @@ spec:
         url: https://${{ parameters.name }}.apps.lab.localhost
       - title: stg URL (after merge)
         url: https://${{ parameters.name }}-stg.apps.lab.localhost
+      - title: Secrets in Vault
+        url: https://vault.lab.localhost/ui/vault/secrets/secret/kv/list/apps/${{ parameters.name }}/

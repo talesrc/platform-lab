@@ -77,6 +77,23 @@ describe('promoteRelease', () => {
     );
   });
 
+  it('counts env vars from secrets as set (Vault is checked separately)', async () => {
+    await write(
+      'envs/stg/release.yaml',
+      release('1.1.0', 'requiredEnv: [API_TOKEN, SESSION_KEY]\n').replace(
+        '  env: {}\n',
+        '  env: {}\n  secretEnv: [API_TOKEN]\n  generatedSecretEnv: { SESSION_KEY: {} }\n',
+      ),
+    );
+
+    const result = await promoteRelease(appDir, 'prd');
+
+    expect(result.tag).toBe('1.1.0');
+    expect(
+      parseYaml(await read('envs/prd/release.yaml')).app.secretEnv,
+    ).toEqual(['API_TOKEN']);
+  });
+
   it('refuses when prd already runs the stg release', async () => {
     await write('envs/prd/release.yaml', release('1.1.0'));
 
