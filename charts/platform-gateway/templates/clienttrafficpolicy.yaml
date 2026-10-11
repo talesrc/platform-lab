@@ -1,0 +1,22 @@
+{{- with .Values.gateway.https }}
+{{- if and .enabled .escapedSlashesAction }}
+# How the platform listener treats %2F/%5C in paths. Envoy Gateway's default
+# (UnescapeAndRedirect) turns an encoded slash into a real one and redirects, which breaks
+# APIs that carry a slash inside one path segment, e.g. Backstage's Argo CD plugin:
+# /api/argocd/find/selector/platform-lab%2Ftenant%3Dhello. Scoped to the platform
+# listener only; the apps listener keeps Envoy's default.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: {{ $.Values.gateway.name }}-https
+  namespace: {{ $.Release.Namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $.Values.gateway.name }}
+      sectionName: https
+  path:
+    escapedSlashesAction: {{ .escapedSlashesAction }}
+{{- end }}
+{{- end }}
