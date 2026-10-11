@@ -90,6 +90,8 @@ backend.add(import('./plugins/alertmanager'));
 // Tech Insights facts (src/plugins/dora).
 backend.add(import('./plugins/dora'));
 backend.add(import('./plugins/dora/techInsights'));
+// "Ready to promote": stg release soaked and quiet, prd behind -> owner (src/plugins/readyToPromote.ts)
+backend.add(import('./plugins/readyToPromote'));
 backend.add(import('@backstage/plugin-signals-backend'));
 
 // mcp actions plugin
