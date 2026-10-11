@@ -2,11 +2,11 @@ apiVersion: v2
 name: app
 description: >-
   platform-lab golden-path chart for workloads: hardened Deployment, Service, HTTPRoute on the
-  gateway's https-apps listener, ServiceMonitor, PodDisruptionBudget and ExternalSecrets for
-  secrets from Vault or generated ones. Apps depend on a pinned version of it
-  (apps/<name>/Chart.yaml) and only provide values.
+  gateway's https-apps listener, ServiceMonitor, SLOs with burn-rate alerts (PrometheusRule),
+  PodDisruptionBudget and ExternalSecrets for secrets from Vault or generated ones. Apps depend
+  on a pinned version of it (apps/<name>/Chart.yaml) and only provide values.
 type: application
-version: 0.2.0
+version: 0.3.0
 home: https://github.com/talesrc/platform-lab/tree/main/charts/app
 # Becomes the OCI annotation org.opencontainers.image.source, which links the ghcr.io package
 # to this repository; without it the workflow's GITHUB_TOKEN can't create the package.

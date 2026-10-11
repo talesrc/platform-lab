@@ -99,6 +99,37 @@
         "interval": { "type": "string" }
       }
     },
+    "slo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "metric": { "type": "string", "pattern": "^[a-zA-Z_:][a-zA-Z0-9_:]*$" },
+        "selector": { "type": "string" },
+        "availability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "objective": { "$ref": "#/definitions/objective" },
+            "errorSelector": { "type": "string", "minLength": 1 }
+          }
+        },
+        "latency": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "objective": { "$ref": "#/definitions/objective" },
+            "le": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?$",
+              "description": "A bucket boundary of the histogram, as Prometheus stores it (e.g. 0.5, 1.0)."
+            }
+          }
+        }
+      }
+    },
     "podDisruptionBudget": {
       "type": "object",
       "properties": { "minAvailable": { "type": "integer", "minimum": 1 } }
@@ -106,6 +137,12 @@
   },
   "definitions": {
     "envName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "objective": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 100,
+      "description": "Percent of requests over 30 days, e.g. 99.5."
+    },
     "probe": {
       "type": "object",
       "required": ["path"],

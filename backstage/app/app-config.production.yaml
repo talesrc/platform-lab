@@ -307,10 +307,14 @@ techInsights:
 # --- Releases -----------------------------------------------------------------------------
 # platform-lab:app:promote (packages/backend/src/plugins/scaffolderPromote.ts) checks stg
 # before promoting: Synced, Healthy and on the release's image in Argo CD (argocd.* above),
-# deployed at least stgSoakMinutes ago, and no warning/critical alert firing in its namespace.
+# deployed at least stgSoakMinutes ago, no SLO burning its error budget faster than
+# stgMaxBurnRate over the last 30 minutes (charts/app SLO rules), and no warning/critical
+# alert firing in its namespace.
 platformLab:
   promotion:
     stgSoakMinutes: 10
+    prometheusUrl: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+    stgMaxBurnRate: 1
     alertmanagerUrl: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093
   # App secrets (packages/backend/src/plugins/vaultSecrets.ts): Vault metadata only, through
   # the `backstage` Kubernetes auth role (terraform/platform-access/app-secrets.tf) with the

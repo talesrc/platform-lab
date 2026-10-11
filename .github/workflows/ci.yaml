@@ -21,6 +21,9 @@ env:
   KUBECONFORM_VERSION: "v0.8.0"
   # renovate: datasource=github-releases depName=kyverno/kyverno
   KYVERNO_VERSION: "v1.19.1"
+  # promtool, from the Prometheus release; keep it close to the cluster's Prometheus.
+  # renovate: datasource=github-releases depName=prometheus/prometheus
+  PROMETHEUS_VERSION: "v3.15.0"
   # renovate: datasource=github-releases depName=rhysd/actionlint
   ACTIONLINT_VERSION: "1.7.12"
   # renovate: datasource=npm depName=@commitlint/cli
@@ -73,6 +76,19 @@ jobs:
           echo "${RUNNER_TEMP}/venv/bin" >> "${GITHUB_PATH}"
       - name: Lint charts, render them and validate all manifests
         run: scripts/ci/validate-manifests.sh
+      - name: Install promtool
+        run: |
+          base="https://github.com/prometheus/prometheus/releases/download/${PROMETHEUS_VERSION}"
+          dir="prometheus-${PROMETHEUS_VERSION#v}.linux-amd64"
+          archive="${dir}.tar.gz"
+          cd "${RUNNER_TEMP}"
+          curl -fsSLO "${base}/${archive}"
+          curl -fsSLo sha256sums.txt "${base}/sha256sums.txt"
+          grep " ${archive}$" sha256sums.txt | sha256sum -c
+          tar xzf "${archive}" --strip-components=1 "${dir}/promtool"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+      - name: Unit-test the chart's SLO rules
+        run: scripts/ci/test-slo-rules.sh
 
   policies:
     name: Kyverno policy tests
