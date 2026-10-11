@@ -97,7 +97,8 @@ resource "helm_release" "argocd" {
         LUA
       }])...)
     }
-    # Deploy, sync-failure and degraded notifications in Backstage (notifications.tf).
+    # Deploy, sync-failure and degraded notifications in Backstage, and prd deploys for its
+    # DORA metrics (notifications.tf).
     notifications = local.argocd_notifications
   })]
 

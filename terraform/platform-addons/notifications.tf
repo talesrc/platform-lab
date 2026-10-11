@@ -1,6 +1,6 @@
-# Backstage notifications from the platform: Argo CD Notifications and Alertmanager call
-# Backstage with static tokens (backend.auth.externalAccess in
-# backstage/app/app-config.production.yaml), one per caller, each limited to one plugin.
+# Backstage notifications (and DORA metrics) from the platform: Argo CD Notifications and
+# Alertmanager call Backstage with static tokens (backend.auth.externalAccess in
+# backstage/app/app-config.production.yaml), one per caller, each limited to the plugins it calls.
 # Generated here, so they never touch git: Backstage reads them from backstage-external-access,
 # the callers from their own Secrets.
 
@@ -104,6 +104,27 @@ locals {
       }
   }) }
 
+  # Body of POST /api/dora/deploys: a prd deploy for the DORA metrics. Backstage classifies
+  # the revision from GitHub (backstage/app/packages/backend/src/plugins/dora).
+  dora_deploy = {
+    "template.dora-deploy" = yamlencode({
+      webhook = {
+        dora = {
+          method = "POST"
+          body = join("\n", [
+            "{",
+            "  \"app\": \"{{ index .app.metadata.labels \"platform-lab/tenant\" }}\",",
+            "  \"environment\": \"{{ index .app.metadata.labels \"platform-lab/environment\" }}\",",
+            "  \"revision\": \"{{ .app.status.operationState.syncResult.revision }}\",",
+            "  \"repoURL\": \"{{ .app.spec.source.repoURL }}\",",
+            "  \"deployedAt\": \"{{ .app.status.operationState.finishedAt }}\"",
+            "}",
+          ])
+        }
+      }
+    })
+  }
+
   # Argo CD Notifications (argo-cd chart `notifications` values).
   argocd_notifications = {
     notifiers = {
@@ -115,8 +136,16 @@ locals {
           { name = "Content-Type", value = "application/json" },
         ]
       })
+      # Same token: Backstage allows it for the dora plugin too.
+      "service.webhook.dora" = yamlencode({
+        url = "http://backstage.backstage.svc:7007/api/dora/deploys"
+        headers = [
+          { name = "Authorization", value = "Bearer $backstage-token" },
+          { name = "Content-Type", value = "application/json" },
+        ]
+      })
     }
-    templates = local.backstage_notification
+    templates = merge(local.backstage_notification, local.dora_deploy)
     triggers = {
       "trigger.on-deployed" = yamlencode([{
         description = "Synced and healthy; once per commit"
@@ -128,6 +157,13 @@ locals {
         description = "Sync operation failed"
         when        = "app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']"
         send        = ["backstage-app-sync-failed"]
+      }])
+      # Same condition as on-deployed, for the DORA metrics' prd deploys.
+      "trigger.on-prd-deployed" = yamlencode([{
+        description = "prd synced and healthy; once per commit"
+        oncePer     = "app.status.operationState?.syncResult?.revision"
+        when        = "app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'"
+        send        = ["dora-deploy"]
       }])
       "trigger.on-health-degraded" = yamlencode([{
         description = "Health is Degraded"
@@ -147,6 +183,12 @@ locals {
         recipients = ["backstage"]
         selector   = "app.kubernetes.io/part-of!=apps"
         triggers   = ["on-sync-failed", "on-health-degraded"]
+      },
+      # Golden-path apps in prd: deploys for the DORA metrics.
+      {
+        recipients = ["dora"]
+        selector   = "app.kubernetes.io/part-of=apps,platform-lab/environment=prd"
+        triggers   = ["on-prd-deployed"]
       },
     ]
   }
