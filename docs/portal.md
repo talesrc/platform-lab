@@ -58,6 +58,45 @@ The bell in the sidebar collects notifications for the owner of each component
 | App deployed, sync failed, app degraded | Argo CD Notifications |
 | Alert firing / resolved | Alertmanager |
 
+## DORA metrics
+
+Golden-path services show a *Delivery (DORA)* card (prd, last 30 days, with their recent prd
+deploys), and the home page a widget across all of them. The numbers describe the delivery
+system, never individuals; with two apps they show the pipeline working rather than a trend.
+
+| Metric | Here |
+|---|---|
+| Deployment frequency | release deploys to prd (promotion, rollback or hotfix) per service per week |
+| Lead time for changes | median time from the release landing in stg (the merge of `envs/stg/release.yaml`) to running in prd |
+| Change failure rate | prd release deploys followed within 24 hours by a rollback, a hotfix or a critical alert in `app-<name>-prd` |
+| Time to restore | median time from a prd failure (critical alert firing, or the bad deploy) to recovery (alert resolved, or rollback/hotfix deployed) |
+
+Where the data comes from:
+
+- **Deploys.** Argo CD Notifications calls `POST /api/dora/deploys` when a prd Application has
+  synced and is healthy (`on-prd-deployed` in `terraform/platform-addons/notifications.tf`).
+  The `dora` backend plugin looks up the deployed commit on GitHub and classifies it: a
+  `chore(apps): promote` pull request is a promotion, `fix(apps): roll back` a rollback, a
+  commit that changes the stg and prd releases together a hotfix, and a sync that doesn't
+  change prd's release (shared values, the chart, environment config, comments) is not a
+  release deploy. A new app's first deploy doesn't count.
+- **Failures.** Alertmanager sends critical alerts in `app-<name>-prd` to `POST /api/dora/alerts`
+  as well as to the owner (`gitops/platform/kube-prometheus-stack.yaml`). An alert within 24
+  hours of a release counts against the latest release before it. To use SLO burn-rate alerts
+  instead, change that route and `plugins/dora/signals.ts`.
+- **Backfill.** Every 6 hours the plugin also reads the history of each golden-path app's
+  `envs/prd/release.yaml` from GitHub, so the metrics start with the past and a missed webhook
+  is caught up. A backfilled deploy is dated when its pull request merged, since git doesn't
+  know when Argo CD synced it.
+
+The data lives in the plugin's own schema (`dora`) of the portal database. The metrics are
+also Tech Insights facts (`doraFactRetriever`, every 6 hours, kept a year), so their history is
+kept. No scorecard check uses them.
+
+Both webhooks reuse their caller's static token, which Backstage also allows for the `dora`
+plugin. The API is `GET /api/dora/metrics?days=30` (all services) and
+`GET /api/dora/metrics/<app>?days=30`.
+
 ## Database
 
 PostgreSQL run by CloudNativePG (cluster `backstage-db`): notifications, starred entities, home
