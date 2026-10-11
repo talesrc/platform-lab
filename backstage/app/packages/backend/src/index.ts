@@ -86,6 +86,10 @@ backend.add(import('@backstage/plugin-user-settings-backend'));
 backend.add(import('@backstage/plugin-notifications-backend'));
 // Alertmanager webhook -> notifications for the owning team (src/plugins/alertmanager.ts)
 backend.add(import('./plugins/alertmanager'));
+// DORA metrics: prd deploys (Argo CD Notifications) and prd failures (Alertmanager), plus
+// Tech Insights facts (src/plugins/dora).
+backend.add(import('./plugins/dora'));
+backend.add(import('./plugins/dora/techInsights'));
 backend.add(import('@backstage/plugin-signals-backend'));
 
 // mcp actions plugin

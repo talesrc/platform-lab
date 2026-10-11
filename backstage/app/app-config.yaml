@@ -61,6 +61,12 @@ app:
               row: 15
               width: 6
               height: 8
+            # DORA metrics across golden-path services (modules/dora).
+            - component: DoraMetrics
+              column: 0
+              row: 23
+              width: 12
+              height: 5
 
     # Visit tracking for the Recently / Most visited widgets (stored in user settings).
     - api:home/visits: true
