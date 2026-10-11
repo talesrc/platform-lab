@@ -83,6 +83,31 @@ metrics:
   path: /metrics
   interval: 30s
 
+# Service level objectives over 30 days, per environment, with burn-rate alerts (a
+# PrometheusRule; needs metrics.enabled). They read the request histogram the app exposes on
+# metrics.path; the defaults fit podinfo-style instrumentation (http_request_duration_seconds
+# with `status` and `path` labels). An app without such a histogram sets slo.enabled: false.
+slo:
+  enabled: true
+  # Histogram name, without the _bucket/_count suffix.
+  metric: http_request_duration_seconds
+  # PromQL label matchers for the requests that count; the default leaves out probes and
+  # Prometheus' own scrapes, which would otherwise be most of a quiet app's traffic.
+  selector: 'path!~"healthz|readyz|metrics"'
+  availability:
+    enabled: true
+    # Percent of requests that must not fail.
+    objective: 99.5
+    # Matchers for a failed request.
+    errorSelector: 'status=~"5.."'
+  latency:
+    enabled: true
+    # Percent of requests that must be faster than `le`.
+    objective: 99
+    # A bucket boundary of the histogram, in seconds, written as Prometheus stores it
+    # (0.5, 1.0, 2.5: whole numbers keep their ".0").
+    le: "0.5"
+
 # Created only when replicas > 1 (a PDB on a single replica would block node drains).
 podDisruptionBudget:
   minAvailable: 1

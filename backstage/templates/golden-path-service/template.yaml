@@ -125,7 +125,7 @@ spec:
         values:
           name: ${{ parameters.name }}
           # Version of charts/app (oci://ghcr.io/talesrc/charts/app) new apps start on.
-          chartVersion: 0.2.0
+          chartVersion: 0.3.0
           description: ${{ parameters.description }}
           owner: ${{ parameters.owner }}
           image: ${{ parameters.image }}
