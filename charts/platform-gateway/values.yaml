@@ -20,6 +20,11 @@ gateway:
     port: 443
     nodePort: 30443
     hostname: "*.lab.localhost"
+    # %2F handling on this listener (ClientTrafficPolicy). KeepUnchanged passes encoded
+    # slashes through, which Backstage's Argo CD plugin needs for label selectors with a
+    # prefix (platform-lab/tenant=<app>). Routes here match by hostname only, never by path,
+    # so unescaping protects nothing. Empty = Envoy Gateway's default (UnescapeAndRedirect).
+    escapedSlashesAction: KeepUnchanged
     # Wildcard certificate issued by cert-manager (see gitops/manifests/cert-manager-issuers).
     certificate:
       secretName: platform-gateway-tls

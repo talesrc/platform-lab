@@ -62,3 +62,33 @@ tests:
             value: 0
           - labels: 'slo:sli_error:ratio_rate5m{namespace="app-hello-stg",job="hello",slo="latency"}'
             value: 1
+  # Low traffic: 1 request a minute, a third of them failing. The error ratio is far over
+  # the budget, but no window reaches slo.minRequests (100) within an hour, so nothing fires.
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="root",status="200"}'
+        values: '0+0.67x90'
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="root",status="500"}'
+        values: '0+0.33x90'
+      - series: 'http_request_duration_seconds_bucket{namespace="app-hello-stg",job="hello",path="root",status="200",le="0.5"}'
+        values: '0+0.67x90'
+      - series: 'http_request_duration_seconds_bucket{namespace="app-hello-stg",job="hello",path="root",status="500",le="0.5"}'
+        values: '0+0.33x90'
+    promql_expr_test:
+      # Requests in the last 30 min that count, as the promotion check reads them.
+      - expr: round(slo:sli_requests:rate30m * 1800)
+        eval_time: 60m
+        exp_samples:
+          - labels: '{namespace="app-hello-stg",job="hello"}'
+            value: 30
+      - expr: round(slo:sli_error:ratio_rate1h, 0.01)
+        eval_time: 60m
+        exp_samples:
+          - labels: '{namespace="app-hello-stg",job="hello",slo="availability"}'
+            value: 0.33
+          - labels: '{namespace="app-hello-stg",job="hello",slo="latency"}'
+            value: 0
+    alert_rule_test:
+      - alertname: AvailabilityErrorBudgetBurn
+        eval_time: 70m
+        exp_alerts: []

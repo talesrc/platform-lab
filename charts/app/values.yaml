@@ -94,6 +94,10 @@ slo:
   # PromQL label matchers for the requests that count; the default leaves out probes and
   # Prometheus' own scrapes, which would otherwise be most of a quiet app's traffic.
   selector: 'path!~"healthz|readyz|metrics"'
+  # An SLO alert fires only once its long window (1h, 6h or 1d) had at least this many
+  # requests: with less traffic, one failed request is a large share and not a trend
+  # (SRE workbook, "low-traffic services"). 0 alerts on any traffic.
+  minRequests: 100
   availability:
     enabled: true
     # Percent of requests that must not fail.

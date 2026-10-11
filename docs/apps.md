@@ -57,7 +57,8 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
    `<name>-stg` is Synced, Healthy and on the release's image, and was deployed at least 10
    minutes ago (`platformLab.promotion.stgSoakMinutes`); in Prometheus, no
    [SLO](observability.md#slos) in stg burned its error budget faster than 1x over the last
-   30 minutes (`stgMaxBurnRate`); in Alertmanager, no warning or critical alert is firing in
+   30 minutes (`stgMaxBurnRate`; skipped with fewer than `stgMinRequests` requests, too few to
+   judge); in Alertmanager, no warning or critical alert is firing in
    `app-<name>-stg`. It also checks that prd's Vault has every secret the release reads (see
    [Secrets](#secrets)) and stops, naming them, if one is missing. Then it copies
    `envs/stg/release.yaml` to
@@ -66,8 +67,11 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
    vars the new release no longer requires (or now sets itself), and opens the pull request.
    You don't have to remember to do this: every 5 minutes Backstage runs the same stg check
    for each service whose prd is behind stg, and once it passes it notifies the owner,
-   *hello 6.16.0 is ready to promote to prd*, linking to the prefilled form. That happens
-   once per stg release (a newer stg release replaces the notification); Backstage keeps
+   *hello 6.16.0 is ready to promote to prd*, linking to the prefilled form. If prd's Vault
+   lacks a [secret](#secrets) the release needs, the notification says which instead
+   (*hello 6.16.0 passes stg, but prd lacks secrets*) and links to prd's secrets in Vault;
+   once they are written, the "ready" notification replaces it. That happens once per stg
+   release and secrets state (a newer one replaces the notification); Backstage keeps
    track of what it sent in its `ready-to-promote` database schema. Set
    `platformLab.promotion.readyNotification` to change the interval or turn it off.
 3. **Merge:** Argo CD deploys prd and notifies the owner.

@@ -1,4 +1,8 @@
-import { checkStgHealth, type StgHealthOptions } from './stgHealth';
+import {
+  burnRateQuery,
+  checkStgHealth,
+  type StgHealthOptions,
+} from './stgHealth';
 
 const IMAGE = 'ghcr.io/stefanprodan/podinfo:6.15.0';
 const NOW = new Date('2026-10-11T12:00:00Z');
@@ -94,9 +98,41 @@ describe('checkStgHealth', () => {
     ]);
     expect(opts.fetch.mock.calls[1][0]).toBe(
       `http://prometheus/api/v1/query?query=${encodeURIComponent(
-        'slo:sli_error:ratio_rate30m{namespace="app-hello-stg"}' +
-          ' / on (namespace, job, slo) slo:error_budget:ratio',
+        burnRateQuery('app-hello-stg', 100),
       )}`,
+    );
+  });
+
+  it('asks Prometheus to leave out SLOs with too little traffic to judge', async () => {
+    const opts = options(
+      healthy,
+      [],
+      { prometheusUrl: 'http://prometheus', minRequests: 50 },
+      {},
+    );
+
+    await checkStgHealth('hello', IMAGE, opts);
+
+    expect(decodeURIComponent(opts.fetch.mock.calls[1][0])).toContain(
+      'unless on (namespace, job) slo:sli_requests:rate30m{namespace="app-hello-stg"} * 1800 < 50',
+    );
+  });
+});
+
+describe('burnRateQuery', () => {
+  it('divides the 30-min error ratio by the error budget, per SLO', () => {
+    expect(burnRateQuery('app-hello-stg', 0)).toBe(
+      'slo:sli_error:ratio_rate30m{namespace="app-hello-stg"}' +
+        ' / on (namespace, job, slo) slo:error_budget:ratio',
+    );
+  });
+
+  it('drops SLOs with fewer requests than the minimum, keeping charts without the count', () => {
+    // `unless` keeps a burn rate when slo:sli_requests doesn't exist (charts before 0.4.0).
+    expect(burnRateQuery('app-hello-stg', 100)).toBe(
+      'slo:sli_error:ratio_rate30m{namespace="app-hello-stg"}' +
+        ' / on (namespace, job, slo) slo:error_budget:ratio' +
+        ' unless on (namespace, job) slo:sli_requests:rate30m{namespace="app-hello-stg"} * 1800 < 100',
     );
   });
 

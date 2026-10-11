@@ -8,10 +8,14 @@ multi-burn-rate alerts (Google SRE workbook, "Alerting on SLOs") for a 30-day SL
 
 The workbook's fourth alert (1x over 3d) needs 3 days of data; Prometheus keeps 2.
 
+Low traffic: an alert also needs at least slo.minRequests requests in its long window (1h,
+6h or 1d), so one failed request out of a handful in a quiet stg doesn't page anyone.
+
 Recorded per app and environment (labels namespace, job = app, slo = availability|latency):
   slo:sli_error:ratio_rate<window>  share of bad requests over the window
   slo:error_budget:ratio            1 - objective
-Burn rate = error ratio / error budget; the promotion check reads both.
+  slo:sli_requests:rate<window>     requests per second that count (no slo label)
+Burn rate = error ratio / error budget; the promotion check reads all three.
 */ -}}
 {{- if and .Values.metrics.enabled .Values.slo.enabled }}
 {{- $slo := .Values.slo }}
@@ -39,6 +43,13 @@ Burn rate = error ratio / error budget; the promotion check reads both.
       "what" (printf "requests take longer than %ss" .le)) }}
 {{- end }}
 {{- end }}
+{{- $windows := list "5m" "30m" "1h" "2h" "6h" "1d" }}
+{{- $reqSel := printf "{namespace=%q, job=%q}" $ns $name }}
+{{- /* "and on (namespace, job) <requests in the long window> >= minRequests", or nothing. */}}
+{{- $enough := dict }}
+{{- range $window, $seconds := dict "1h" 3600 "6h" 21600 "1d" 86400 }}
+{{- $_ := set $enough $window (ternary (printf "\n            and on (namespace, job) slo:sli_requests:rate%s%s * %d >= %v" $window $reqSel $seconds $slo.minRequests) "" (gt (int $slo.minRequests) 0)) }}
+{{- end }}
 {{- if $slis }}
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -48,13 +59,19 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
 spec:
   groups:
+    - name: {{ $name }}-slo-requests
+      rules:
+        {{- range $windows }}
+        - record: slo:sli_requests:rate{{ . }}
+          expr: {{ replace "WINDOW" . $total | quote }}
+        {{- end }}
     {{- range $slis }}
     {{- $sli := . }}
     {{- $sel := printf "{namespace=%q, job=%q, slo=%q}" $ns $name .name }}
     {{- $budget := printf "(1 - %v / 100)" .objective }}
     - name: {{ $name }}-slo-{{ .name }}
       rules:
-        {{- range list "5m" "30m" "1h" "2h" "6h" "1d" }}
+        {{- range $windows }}
         - record: slo:sli_error:ratio_rate{{ . }}
           expr: {{ replace "WINDOW" . $sli.ratio | quote }}
           labels:
@@ -69,10 +86,10 @@ spec:
         - alert: {{ .title }}ErrorBudgetBurn
           expr: >-
             (slo:sli_error:ratio_rate1h{{ $sel }} > 14.4 * {{ $budget }}
-            and slo:sli_error:ratio_rate5m{{ $sel }} > 14.4 * {{ $budget }})
+            and slo:sli_error:ratio_rate5m{{ $sel }} > 14.4 * {{ $budget }}{{ get $enough "1h" }})
             or
             (slo:sli_error:ratio_rate6h{{ $sel }} > 6 * {{ $budget }}
-            and slo:sli_error:ratio_rate30m{{ $sel }} > 6 * {{ $budget }})
+            and slo:sli_error:ratio_rate30m{{ $sel }} > 6 * {{ $budget }}{{ get $enough "6h" }})
           for: 2m
           labels:
             severity: critical
@@ -84,7 +101,7 @@ spec:
         - alert: {{ .title }}ErrorBudgetBurn
           expr: >-
             slo:sli_error:ratio_rate1d{{ $sel }} > 3 * {{ $budget }}
-            and slo:sli_error:ratio_rate2h{{ $sel }} > 3 * {{ $budget }}
+            and slo:sli_error:ratio_rate2h{{ $sel }} > 3 * {{ $budget }}{{ get $enough "1d" }}
           for: 15m
           labels:
             severity: warning
