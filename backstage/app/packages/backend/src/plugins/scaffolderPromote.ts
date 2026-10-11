@@ -2,7 +2,8 @@
  * Scaffolder actions for releases of golden-path apps (release files: releases.ts):
  *
  * - platform-lab:app:promote, used by "Promote to prd" (backstage/templates/promote-app):
- *   checks that stg runs the release well (stgHealth.ts), then copies envs/stg/release.yaml to
+ *   checks that stg runs the release well (stgHealth.ts) and that prd's Vault has every secret
+ *   the release needs (vaultSecrets.ts, metadata only), then copies envs/stg/release.yaml to
  *   prd, sets the env vars prd needs and removes the ones the new release no longer needs;
  * - platform-lab:app:rollback, used by "Roll back prd" (backstage/templates/rollback-app):
  *   restores the release prd ran before, from the git history of envs/prd/release.yaml.
@@ -26,13 +27,20 @@ import { type FileVersion, GithubFileHistory } from './releaseHistory';
 import {
   ENVIRONMENTS,
   applyRelease,
+  environmentSecrets,
   parseRelease,
   promoteRelease,
   releaseImage,
   sameRelease,
+  type Environment,
   type Values,
 } from './releases';
 import { checkStgHealth, stgHealthOptionsFromConfig } from './stgHealth';
+import {
+  VaultMetadataClient,
+  secretsUiUrl,
+  vaultOptionsFromConfig,
+} from './vaultSecrets';
 
 /** A branch name that is new on every run (config-only releases reuse a tag). */
 export function branchName(
@@ -44,6 +52,37 @@ export function branchName(
   const stamp = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
   return `${kind}/${app}-prd-${tag.replace(/[^A-Za-z0-9._-]/g, '-')}-${stamp}`;
 }
+
+/**
+ * Problems with the Vault secrets environment `to` needs for the release promoted into it
+ * (the previous environment's): each one missing or deleted, or Vault unreadable. Empty when
+ * the release needs no secrets, without asking Vault.
+ */
+export async function checkReleaseSecrets(
+  config: Config,
+  appDir: string,
+  app: string,
+  to: Environment,
+  client?: VaultMetadataClient,
+): Promise<string[]> {
+  const from = ENVIRONMENTS[ENVIRONMENTS.indexOf(to) - 1] ?? to;
+  const names = await environmentSecrets(appDir, to, from);
+  if (names.length === 0) return [];
+  const options = vaultOptionsFromConfig(config);
+  if (!client && !options) {
+    return [
+      `the release needs ${names.join(
+        ', ',
+      )} from Vault, but platformLab.vault isn't configured to check them`,
+    ];
+  }
+  return (client ?? new VaultMetadataClient(options!)).check(app, to, names);
+}
+
+const vaultUiFor = (config: Config, app: string, env: Environment) => {
+  const options = vaultOptionsFromConfig(config);
+  return options && secretsUiUrl(options, app, env);
+};
 
 export function createPromoteAction(config: Config) {
   return createTemplateAction({
@@ -76,6 +115,13 @@ export function createPromoteAction(config: Config) {
             .describe(
               'Check in Argo CD and Alertmanager that stg runs the release well first',
             ),
+        checkSecrets: z =>
+          z
+            .boolean()
+            .default(true)
+            .describe(
+              "Check in Vault's metadata that the target environment has every secret the release needs",
+            ),
       },
       output: {
         from: z => z.string(),
@@ -88,7 +134,7 @@ export function createPromoteAction(config: Config) {
       },
     },
     async handler(ctx) {
-      const { app, to, env, checkStg } = ctx.input;
+      const { app, to, env, checkStg, checkSecrets } = ctx.input;
       const appDir = path.join(ctx.workspacePath, 'apps', app);
 
       if (checkStg) {
@@ -106,6 +152,20 @@ export function createPromoteAction(config: Config) {
           );
         }
         ctx.logger.info(`stg runs ${image} well: Synced, Healthy, no alerts`);
+      }
+
+      if (checkSecrets) {
+        const problems = await checkReleaseSecrets(config, appDir, app, to);
+        if (problems.length) {
+          const ui = vaultUiFor(config, app, to);
+          throw new InputError(
+            `${to} lacks secrets the ${app} release needs:\n${problems
+              .map(p => `- ${p}`)
+              .join('\n')}\nThe owners write them in Vault${
+              ui ? ` (${ui})` : ''
+            }, then run the template again.`,
+          );
+        }
       }
 
       const result = await promoteRelease(appDir, to, env ?? {});

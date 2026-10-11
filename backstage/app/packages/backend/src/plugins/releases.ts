@@ -23,6 +23,10 @@ export type Values = {
   app?: {
     image?: { repository?: string; tag?: string };
     env?: Record<string, string>;
+    /** Env vars from Vault, apps/<name>/<env>/<ENV_VAR> (charts/app). */
+    secretEnv?: string[];
+    /** Env vars with generated values (External Secrets Password generator). */
+    generatedSecretEnv?: Record<string, unknown>;
   };
   requiredEnv?: string[];
 };
@@ -42,6 +46,11 @@ export type PromotionResult = ReleaseResult & {
 };
 
 const envOf = (values: Values | undefined) => values?.app?.env ?? {};
+/** Env var names a values file takes from secrets: Vault (secretEnv) and generated ones. */
+const secretNamesOf = (values: Values | undefined) => [
+  ...(values?.app?.secretEnv ?? []),
+  ...Object.keys(values?.app?.generatedSecretEnv ?? {}),
+];
 const names = (list: string[]) =>
   `${list.join(', ')} ${list.length > 1 ? 'are' : 'is'}`;
 
@@ -163,6 +172,8 @@ export async function applyRelease(options: {
     ...Object.keys(toEnv).filter(name => !removed.includes(name)),
     ...Object.keys(releaseEnv),
     ...Object.keys(env),
+    // Secrets count as set here; whether Vault holds them is checked separately (appSecrets.ts).
+    ...[shared, toValues, release].flatMap(secretNamesOf),
   ]);
   const missing = [...required].filter(name => !provided.has(name));
   if (missing.length) {
@@ -222,6 +233,28 @@ export async function promoteRelease(
     removeUnused: true,
   });
   return { ...result, from, to };
+}
+
+/** Env vars taken from Vault (secretEnv) by these values files, sorted and without duplicates. */
+export const vaultSecretNames = (...files: Array<Values | undefined>) =>
+  [...new Set(files.flatMap(values => values?.app?.secretEnv ?? []))].sort();
+
+/**
+ * The Vault secrets environment `env` of apps/<name>/ (appDir) needs to run the release in
+ * envs/<releaseFrom>/release.yaml: its secretEnv plus the shared and environment values'.
+ * For a promotion to prd, releaseFrom is stg.
+ */
+export async function environmentSecrets(
+  appDir: string,
+  env: Environment,
+  releaseFrom: Environment = env,
+): Promise<string[]> {
+  const file = (name: string) => readValues(path.join(appDir, name));
+  return vaultSecretNames(
+    await file('values.yaml'),
+    await file(`envs/${env}/values.yaml`),
+    await file(`envs/${releaseFrom}/release.yaml`),
+  );
 }
 
 /** The image the release in apps/<name>/envs/<env>/release.yaml runs (repository:tag). */

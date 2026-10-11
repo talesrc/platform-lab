@@ -14,7 +14,31 @@ image:
 # binary is in CMD (no ENTRYPOINT) also need `command`.
 command: []
 args: []
+# Plain env vars: config only. Anything secret goes in secretEnv or generatedSecretEnv (git is
+# public; CI rejects secret-looking names here).
 env: {}
+
+# Env vars whose values live in Vault, one secret per env var at
+# secret/apps/<name>/<env>/<ENV_VAR> (field `value`). The ExternalSecret <name>-secrets syncs
+# them into the Secret <name>-secrets; the container gets each one through secretKeyRef.
+# Values are never in git: owners write them in Vault (see docs/apps.md, Secrets).
+secretEnv: []
+
+# Env vars with random values nobody types or sees, made by an External Secrets Password
+# generator once (refreshPolicy: CreatedOnce) into the Secret <name>-generated. Rotate one by
+# deleting that Secret, then restart the Deployment.
+#   SESSION_KEY: { length: 32 }
+generatedSecretEnv: {}
+
+secrets:
+  # Vault KV path (mount secret/) of this app and environment, apps/<name>/<env>. Set by the
+  # apps ApplicationSet; a Kyverno policy only admits ExternalSecrets for the namespace's own path.
+  vaultPath: ""
+  # ClusterSecretStore that reads secret/apps/* (gitops/manifests/platform-secrets).
+  store: vault-apps
+  # How often External Secrets re-reads Vault. Env vars are read at start-up: after a value
+  # changes, restart the Deployment to use it.
+  refreshInterval: 5m
 
 replicas: 1
 

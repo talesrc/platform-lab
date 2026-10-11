@@ -6,16 +6,23 @@ release: image tag, release-scoped env vars and the env vars it requires), for e
 environment of the apps ApplicationSet. Promotion copies a release.yaml to the next
 environment as one unit, so:
 
-1. release.yaml holds only app.image.tag, app.env and requiredEnv;
+1. release.yaml holds only app.image.tag, app.env, app.secretEnv, app.generatedSecretEnv and
+   requiredEnv;
 2. an env var is either release-scoped (release.yaml) or environment config (values.yaml,
-   envs/<env>/values.yaml), never both;
+   envs/<env>/values.yaml), never both; and it is plain (env), from Vault (secretEnv) or
+   generated (generatedSecretEnv), never more than one;
 3. every name in requiredEnv is set in that environment;
 4. with --base <git ref> (pull requests): a release.yaml that changed since <ref> must equal
    the previous environment's release.yaml, so prd only runs what stg runs. A hotfix changes
    both files in the same pull request; a rollback restores a release the environment ran
    before (an earlier version of its release.yaml in git);
 5. a `# renovate: ... depName=<image>` comment (Renovate bumps stg's tag) names the app's
-   image repository from values.yaml.
+   image repository from values.yaml;
+6. no plain env var looks like a secret (PASSWORD, TOKEN, ...): this repository is public, so
+   secrets go in secretEnv (values in Vault) or generatedSecretEnv.
+
+Whether prd's Vault holds every secretEnv value is checked by the promote action in Backstage,
+which can read Vault's metadata; CI can't reach Vault.
 
 Usage: check-app-envs.py [--base <git ref>]
 """
@@ -32,7 +39,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ["stg", "prd"]
 # How many earlier versions of a release.yaml a rollback may go back to.
 ROLLBACK_DEPTH = 20
-RELEASE_KEYS = {"app": {"image": {"tag"}, "env": None}, "requiredEnv": None}
+RELEASE_KEYS = {
+    "app": {"image": {"tag"}, "env": None, "secretEnv": None, "generatedSecretEnv": None},
+    "requiredEnv": None,
+}
+# Plain env var names that are almost certainly secrets.
+SECRET_LIKE = re.compile(r"PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_?KEY|CREDENTIAL", re.I)
 
 
 def load(path):
@@ -41,6 +53,16 @@ def load(path):
 
 def env_of(values):
     return dict(((values or {}).get("app") or {}).get("env") or {})
+
+
+def env_sources(values):
+    """(kind, names) for each way a values file sets env vars: env, secretEnv, generatedSecretEnv."""
+    app = (values or {}).get("app") or {}
+    return [
+        ("env", list(app.get("env") or {})),
+        ("secretEnv", list(app.get("secretEnv") or [])),
+        ("generatedSecretEnv", list(app.get("generatedSecretEnv") or {})),
+    ]
 
 
 def unexpected_keys(doc, allowed, prefix=""):
@@ -122,11 +144,31 @@ def check_app(app, base):
                 f"release-scoped (same everywhere) or environment config, not both"
             )
 
+        # Where each env var comes from in this environment (env, secretEnv, generatedSecretEnv).
+        kinds = {}
+        files = {"values.yaml": shared_values, f"envs/{env}/values.yaml": values, f"envs/{env}/release.yaml": release}
+        for file, doc in files.items():
+            for kind, names in env_sources(doc):
+                for var in names:
+                    if kind == "env" and SECRET_LIKE.search(var):
+                        errors.append(
+                            f"{file} sets {var} as a plain env var, but it looks like a secret and git is "
+                            f"public: list it under app.secretEnv (value in Vault at apps/{name}/{env}/{var}) "
+                            f"or app.generatedSecretEnv"
+                        )
+                    kinds.setdefault(var, set()).add(kind)
+        for var, found in sorted(kinds.items()):
+            if len(found) > 1:
+                errors.append(
+                    f"{var} is in {' and '.join(sorted(found))} in {env}: an env var is plain, from Vault "
+                    f"or generated, not more than one"
+                )
+
         required = release.get("requiredEnv") or []
         if not isinstance(required, list):
             errors.append(f"envs/{env}/release.yaml: requiredEnv must be a list of env var names")
             required = []
-        provided = set(shared) | set(env_env) | set(release_env)
+        provided = set(shared) | set(env_env) | set(release_env) | set(kinds)
         for var in required:
             if var not in provided:
                 errors.append(

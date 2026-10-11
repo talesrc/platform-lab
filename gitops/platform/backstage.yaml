@@ -126,6 +126,21 @@ spec:
                   key: dbname
           # The configuration lives in the image (backstage/app/app-config.production.yaml).
           appConfig: {}
+          # Vault login (Kubernetes auth, role backstage: metadata of app secrets only). A
+          # token for the `vault` audience, separate from the API-server token, refreshed by
+          # the kubelet; the backend re-reads it at each login.
+          extraVolumes:
+            - name: vault-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: vault
+                      expirationSeconds: 3600
+                      path: token
+          extraVolumeMounts:
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
         # Identity of the Kubernetes plugin (authProvider: serviceAccount, in-cluster token).
         serviceAccount:
           create: true

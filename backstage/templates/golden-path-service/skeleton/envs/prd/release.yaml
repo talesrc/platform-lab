@@ -1,13 +1,19 @@
 # The release running in this environment. Promotion (Backstage: "Promote to prd") copies
 # envs/stg/release.yaml over envs/prd/release.yaml, so everything here moves together.
-# Only app.image.tag, app.env and requiredEnv are allowed (scripts/ci/check-app-envs.py).
+# Only app.image.tag, app.env, app.secretEnv, app.generatedSecretEnv and requiredEnv are
+# allowed (scripts/ci/check-app-envs.py).
 app:
   image:
     # Renovate bumps this in stg only (renovate.json); prd gets it by promotion.
     # renovate: datasource=docker depName=${{ values.image }}
     tag: "${{ values.tag }}"
-  # Env vars that belong to this version and are the same in every environment.
+  # Env vars that belong to this version and are the same in every environment. Config only:
+  # git is public, so secrets go in secretEnv.
   env: {}
+  # Env vars this version reads from Vault, one secret each at apps/${{ values.name }}/<env>/<ENV_VAR>
+  # (field `value`). Owners write the values in Vault, never in git; promotion refuses prd
+  # until Vault has every one.
+  secretEnv: ${{ values.secretEnv | dump }}
 # Env vars this version needs from each environment (envs/<env>/values.yaml or the shared
 # values.yaml); CI and the promote template refuse an environment that lacks one.
 requiredEnv: []

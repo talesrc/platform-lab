@@ -20,6 +20,7 @@ import {
 } from '@roadiehq/backstage-plugin-argo-cd';
 import Box from '@material-ui/core/Box';
 import Typography from '@material-ui/core/Typography';
+import { SecretsTable } from './SecretsTable';
 
 // Promotion order (the apps ApplicationSet); other environments sort last.
 const ENVIRONMENTS = ['stg', 'prd'];
@@ -81,7 +82,7 @@ const templateLink = (template: string, entityRef: string) =>
 /**
  * What runs where for a golden-path app: one row per environment (the Argo CD Applications
  * matching argocd/app-selector), with the running image, sync/health and the last deploy,
- * plus the release templates for this service.
+ * each secret per environment (SecretsTable), plus the release templates for this service.
  */
 export const ReleasesCard = () => {
   const { entity } = useEntity();
@@ -186,6 +187,7 @@ export const ReleasesCard = () => {
           )}
         </>
       )}
+      <SecretsTable entityRef={entityRef} />
       <Box display="flex" flexWrap="wrap" mt={2} style={{ gap: 12 }}>
         <LinkButton
           variant="contained"

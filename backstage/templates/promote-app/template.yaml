@@ -5,9 +5,10 @@ metadata:
   title: Promote to prd
   description: >-
     Promotes a golden-path service's stg release (image tag and the env vars that belong to it)
-    to prd, once stg runs it well (Synced, Healthy, soaked, no alerts). Asks for prd's value
-    of any env var the release requires, removes the ones it no longer needs, then opens a
-    pull request; merging it deploys the release to prd through Argo CD.
+    to prd, once stg runs it well (Synced, Healthy, soaked, no alerts) and prd's Vault has every
+    secret the release reads (secretEnv). Asks for prd's value of any env var the release
+    requires, removes the ones it no longer needs, then opens a pull request; merging it
+    deploys the release to prd through Argo CD.
   tags: [recommended, gitops, release]
 spec:
   owner: group:platform-team
@@ -56,10 +57,11 @@ spec:
         targetPath: apps/${{ parameters.app | parseEntityRef | pick('name') }}
 
     # backstage/app/packages/backend/src/plugins/scaffolderPromote.ts: checks that stg runs
-    # the release well (Argo CD, Alertmanager), copies the stg release, sets the env vars
-    # above, removes the ones it no longer needs and checks its requiredEnv against prd.
+    # the release well (Argo CD, Alertmanager) and that prd's Vault has the release's secrets
+    # (metadata only), copies the stg release, sets the env vars above, removes the ones it no
+    # longer needs and checks its requiredEnv against prd.
     - id: promote
-      name: Check stg and promote its release
+      name: Check stg and prd's secrets, promote the release
       action: platform-lab:app:promote
       input:
         app: ${{ parameters.app | parseEntityRef | pick('name') }}
@@ -87,6 +89,8 @@ spec:
             by it): ${{ steps['promote'].output.envRemoved or 'none' }}.
           - stg was Synced, Healthy and on this release's image in Argo CD, past its soak time,
             with no warning or critical alert firing.
+          - prd's Vault has every secret the release reads (`secretEnv`), checked from Vault's
+            metadata.
 
           ${{ parameters.reason or '' }}
 

@@ -25,9 +25,9 @@ import { parse as parseYaml } from 'yaml';
 import { GithubFileHistory } from './releaseHistory';
 import { sameRelease, type Values } from './releases';
 
-const SOURCE_LOCATION = 'backstage.io/source-location';
+export const SOURCE_LOCATION = 'backstage.io/source-location';
 // url:https://github.com/<owner>/<repo>/tree/<ref>/apps/<name>
-const GOLDEN_PATH_SOURCE =
+export const GOLDEN_PATH_SOURCE =
   /^url:(https:\/\/github\.com\/[^/]+\/[^/]+)\/tree\/([^/]+)\/(apps\/[^/]+)\/?$/;
 
 const has = (entity: Entity, annotation: string) =>

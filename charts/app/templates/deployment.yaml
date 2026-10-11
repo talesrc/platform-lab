@@ -35,11 +35,27 @@ spec:
           args:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.env }}
+          {{- include "app.checkEnvNames" . }}
+          {{- if or .Values.env .Values.secretEnv .Values.generatedSecretEnv }}
           env:
-            {{- range $name, $value := . }}
+            {{- range $name, $value := .Values.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}
+            {{- end }}
+            {{- /* Secrets by reference only: the values stay in Vault and the Secrets. */}}
+            {{- range .Values.secretEnv }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.name" $ }}-secrets
+                  key: {{ . }}
+            {{- end }}
+            {{- range $name, $_ := .Values.generatedSecretEnv }}
+            - name: {{ $name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "app.name" $ }}-generated
+                  key: {{ $name }}
             {{- end }}
           {{- end }}
           ports:

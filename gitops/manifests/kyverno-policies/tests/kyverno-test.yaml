@@ -7,9 +7,26 @@ policies:
   - ../require-requests-limits.yaml
   - ../disallow-latest-tag.yaml
   - ../require-app-name-label.yaml
+  - ../restrict-app-externalsecrets.yaml
 resources:
   - resources.yaml
+  - externalsecrets.yaml
 results:
+  - policy: restrict-app-externalsecrets
+    isValidatingPolicy: true
+    kind: ExternalSecret
+    resources: [app-hello-stg/own-path, app-my-api-prd/generated]
+    result: pass
+  - policy: restrict-app-externalsecrets
+    isValidatingPolicy: true
+    kind: ExternalSecret
+    resources: [app-hello-stg/other-env, app-hello-stg/other-app, app-hello-stg/platform-store, app-hello-stg/find]
+    result: fail
+  - policy: restrict-app-externalsecrets
+    isValidatingPolicy: true
+    kind: ExternalSecret
+    resources: [backstage/backstage-github]
+    result: skip
   - policy: require-requests-limits
     isValidatingPolicy: true
     kind: Pod
