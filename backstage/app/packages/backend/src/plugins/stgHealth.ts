@@ -4,10 +4,15 @@
  *
  * - Argo CD: <app>-stg is Synced and Healthy, runs the release's image, and was last deployed
  *   at least `soakMinutes` ago (the release had time to show problems);
- * - Alertmanager: no warning or critical alert is firing in namespace app-<app>-stg.
+ * - Prometheus: over the last 30 minutes, stg spends none of its SLOs' error budgets faster
+ *   than `maxBurnRate` (the golden-path chart's slo:* rules, charts/app/templates/slo.yaml).
+ *   Burn rate = share of bad requests / error budget; 1 spends the budget exactly over 30
+ *   days. No requests at all is no evidence either way and passes;
+ * - Alertmanager: no warning or critical alert is firing in namespace app-<app>-stg (which
+ *   includes the SLO burn-rate alerts, and catches what SLOs don't, like crash loops).
  *
  * Git says what stg should run; this checks what it does run. A check that can't be made
- * (Argo CD or Alertmanager unreachable) is a problem too: promotion fails closed.
+ * (Argo CD, Prometheus or Alertmanager unreachable) is a problem too: promotion fails closed.
  */
 import type { Config } from '@backstage/config';
 
@@ -16,6 +21,10 @@ export type StgHealthOptions = {
   argocd: { url: string; token: string };
   /** Alertmanager API, e.g. http://kube-prometheus-stack-alertmanager.monitoring.svc:9093. */
   alertmanagerUrl?: string;
+  /** Prometheus API, e.g. http://kube-prometheus-stack-prometheus.monitoring.svc:9090. */
+  prometheusUrl?: string;
+  /** Highest SLO burn rate over the last 30 minutes that still allows promotion (default 1). */
+  maxBurnRate?: number;
   /** Minimum time since stg's last deploy. */
   soakMinutes: number;
   fetch?: typeof fetch;
@@ -32,6 +41,20 @@ type ArgoApplication = {
 };
 
 type Alert = { labels?: Record<string, string> };
+
+type PrometheusVector = {
+  data?: {
+    result?: Array<{
+      metric?: Record<string, string>;
+      value?: [number, string];
+    }>;
+  };
+};
+
+/** Burn rate per SLO in a namespace, from the golden-path chart's recording rules. */
+const burnRateQuery = (namespace: string) =>
+  `slo:sli_error:ratio_rate30m{namespace="${namespace}"}` +
+  ` / on (namespace, job, slo) slo:error_budget:ratio`;
 
 const BLOCKING_SEVERITIES = new Set(['critical', 'warning']);
 
@@ -52,6 +75,12 @@ export function stgHealthOptionsFromConfig(config: Config): StgHealthOptions {
     },
     alertmanagerUrl: config.getOptionalString(
       'platformLab.promotion.alertmanagerUrl',
+    ),
+    prometheusUrl: config.getOptionalString(
+      'platformLab.promotion.prometheusUrl',
+    ),
+    maxBurnRate: config.getOptionalNumber(
+      'platformLab.promotion.stgMaxBurnRate',
     ),
     soakMinutes:
       config.getOptionalNumber('platformLab.promotion.stgSoakMinutes') ?? 10,
@@ -118,6 +147,32 @@ export async function checkStgHealth(
     }
   } catch (error) {
     problems.push(`could not read ${name} from Argo CD (${error})`);
+  }
+
+  if (options.prometheusUrl) {
+    const maxBurnRate = options.maxBurnRate ?? 1;
+    const query = encodeURIComponent(burnRateQuery(`app-${name}`));
+    try {
+      const { data } = await getJson<PrometheusVector>(
+        fetchImpl,
+        `${options.prometheusUrl}/api/v1/query?query=${query}`,
+      );
+      for (const { metric, value } of data?.result ?? []) {
+        // NaN when stg had no requests in the window (0 / 0): never above the limit.
+        const burnRate = Number(value?.[1]);
+        if (burnRate > maxBurnRate) {
+          problems.push(
+            `stg spends its ${metric?.slo ?? 'SLO'} error budget ` +
+              `${burnRate.toFixed(
+                1,
+              )}x as fast as the SLO allows over the last 30 min ` +
+              `(at most ${maxBurnRate}x to promote)`,
+          );
+        }
+      }
+    } catch (error) {
+      problems.push(`could not read SLO burn rates for app-${name} (${error})`);
+    }
   }
 
   if (options.alertmanagerUrl) {

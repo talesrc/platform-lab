@@ -1,0 +1,64 @@
+# promtool unit tests for the golden-path chart's SLO rules (charts/app/templates/slo.yaml),
+# rendered with the chart defaults for app "hello" in app-hello-stg (scripts/ci/test-slo-rules.sh).
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  # 10% of real requests fail; probes (healthz) are many more and all succeed.
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="root",status="200"}'
+        values: '0+90x120'
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="root",status="500"}'
+        values: '0+10x120'
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="healthz",status="200"}'
+        values: '0+1000x120'
+      - series: 'http_request_duration_seconds_bucket{namespace="app-hello-stg",job="hello",path="root",status="200",le="0.5"}'
+        values: '0+90x120'
+      - series: 'http_request_duration_seconds_bucket{namespace="app-hello-stg",job="hello",path="root",status="500",le="0.5"}'
+        values: '0+10x120'
+      - series: 'http_request_duration_seconds_bucket{namespace="app-hello-stg",job="hello",path="healthz",status="200",le="0.5"}'
+        values: '0+1000x120'
+    promql_expr_test:
+      - expr: round(slo:sli_error:ratio_rate30m, 0.001)
+        eval_time: 60m
+        exp_samples:
+          - labels: '{namespace="app-hello-stg",job="hello",slo="availability"}'
+            value: 0.1
+          - labels: '{namespace="app-hello-stg",job="hello",slo="latency"}'
+            value: 0
+      - expr: round(slo:sli_error:ratio_rate30m / on (namespace, job, slo) slo:error_budget:ratio, 0.001)
+        eval_time: 60m
+        exp_samples:
+          - labels: '{namespace="app-hello-stg",job="hello",slo="availability"}'
+            value: 20
+          - labels: '{namespace="app-hello-stg",job="hello",slo="latency"}'
+            value: 0
+    alert_rule_test:
+      - alertname: AvailabilityErrorBudgetBurn
+        eval_time: 70m
+        exp_alerts:
+          - exp_labels: {namespace: app-hello-stg, job: hello, slo: availability, severity: critical}
+            exp_annotations:
+              summary: hello is burning its availability error budget fast
+              description: "hello in app-hello-stg: requests fail at 6x or more the rate the 99.5% availability objective allows; at this rate the 30-day error budget is gone in 5 days or less. Check recent deploys and roll back if one caused it."
+          - exp_labels: {namespace: app-hello-stg, job: hello, slo: availability, severity: warning}
+            exp_annotations:
+              summary: hello is burning its availability error budget
+              description: "hello in app-hello-stg: requests fail at 3x or more the rate the 99.5% availability objective allows, over the last day; at this rate the 30-day error budget is gone in about 10 days."
+      - alertname: LatencyErrorBudgetBurn
+        eval_time: 70m
+        exp_alerts: []
+  # No 5xx series at all: availability errors are 0, not missing; a `le` with no bucket
+  # (here: none exported) counts everything as slow.
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{namespace="app-hello-stg",job="hello",path="root",status="200"}'
+        values: '0+60x60'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m
+        eval_time: 30m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{namespace="app-hello-stg",job="hello",slo="availability"}'
+            value: 0
+          - labels: 'slo:sli_error:ratio_rate5m{namespace="app-hello-stg",job="hello",slo="latency"}'
+            value: 1

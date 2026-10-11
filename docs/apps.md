@@ -55,10 +55,12 @@ replicas), stays in `envs/<env>/values.yaml` and is never promoted.
 2. **Promote to prd:** in Backstage, **Create → Promote to prd** (or *Promote stg to prd* on the
    service's *Releases* card). First it checks that stg runs the release well: in Argo CD,
    `<name>-stg` is Synced, Healthy and on the release's image, and was deployed at least 10
-   minutes ago (`platformLab.promotion.stgSoakMinutes`); in Alertmanager, no warning or
-   critical alert is firing in `app-<name>-stg`. It also checks that prd's Vault has every
-   secret the release reads (see [Secrets](#secrets)) and stops, naming them, if one is
-   missing. Then it copies `envs/stg/release.yaml` to
+   minutes ago (`platformLab.promotion.stgSoakMinutes`); in Prometheus, no
+   [SLO](observability.md#slos) in stg burned its error budget faster than 1x over the last
+   30 minutes (`stgMaxBurnRate`); in Alertmanager, no warning or critical alert is firing in
+   `app-<name>-stg`. It also checks that prd's Vault has every secret the release reads (see
+   [Secrets](#secrets)) and stops, naming them, if one is missing. Then it copies
+   `envs/stg/release.yaml` to
    `envs/prd/release.yaml`, asks for prd's value of any required env var prd doesn't set yet
    (and stops, naming them, if one is missing), removes from `envs/prd/values.yaml` the env
    vars the new release no longer requires (or now sets itself), and opens the pull request.
@@ -146,7 +148,8 @@ credentials from Vault's database engine are a later step.
 
 | | |
 |---|---|
-| Manifests | Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (when `replicas > 1`), ExternalSecrets and Password generators (when the app has secrets) |
+| Manifests | Deployment, Service, HTTPRoute, ServiceMonitor, PrometheusRule (SLOs), PodDisruptionBudget (when `replicas > 1`), ExternalSecrets and Password generators (when the app has secrets) |
+| SLOs | per environment, over 30 days: 99.5% of requests don't fail (5xx), 99% take under 0.5s; burn-rate alerts reach the owners ([details](observability.md#slos)) |
 | Security | non-root (UID 65532), read-only root filesystem (writable `emptyDir`s via `writablePaths`), no service-account token, all capabilities dropped, seccomp `RuntimeDefault` |
 | Resources | requests and a memory limit, `/readyz` and `/healthz` probes |
 | Validation | `values.schema.json` rejects bad values (e.g. a missing or `latest` image tag) before anything renders |

@@ -151,7 +151,9 @@ export function createPromoteAction(config: Config) {
               .join('\n')}`,
           );
         }
-        ctx.logger.info(`stg runs ${image} well: Synced, Healthy, no alerts`);
+        ctx.logger.info(
+          `stg runs ${image} well: Synced, Healthy, within its SLOs, no alerts`,
+        );
       }
 
       if (checkSecrets) {

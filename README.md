@@ -116,6 +116,11 @@ kubectl -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.da
 Alertmanager sends every alert except `Watchdog` to Backstage as a notification for the
 owning team (see [Developer portal](#developer-portal)).
 
+Every golden-path app gets SLOs per environment from `charts/app` (99.5% of requests don't
+fail, 99% take under 0.5s, over 30 days) with multi-window burn-rate alerts: critical when
+the error budget would be gone in 5 days or less, warning at about 10 days. Promotion checks
+stg's burn rate before opening the pull request. See [docs/observability.md](docs/observability.md#slos).
+
 Prometheus selects ServiceMonitors, PodMonitors, Probes and PrometheusRules from every
 namespace. etcd, kube-scheduler, kube-controller-manager and kube-proxy are not scraped:
 kind binds their metrics to `127.0.0.1` inside the nodes.
@@ -180,7 +185,7 @@ apps/<name>/
 
 | Convention | Value |
 |---|---|
-| Manifests | rendered by `charts/app`: Deployment, Service, HTTPRoute, ServiceMonitor, PodDisruptionBudget (replicas > 1) |
+| Manifests | rendered by `charts/app`: Deployment, Service, HTTPRoute, ServiceMonitor, PrometheusRule (SLOs + burn-rate alerts), PodDisruptionBudget (replicas > 1) |
 | Defaults | non-root (UID 65532), read-only root filesystem (writable `emptyDir`s via `writablePaths`), no service-account token, requests + memory limit, `/readyz` + `/healthz` probes |
 | Values | `charts/app/values.yaml` documents them; `values.schema.json` rejects bad ones (e.g. a missing or `latest` image tag) before anything renders |
 | Namespaces | `app-<name>-stg` and `app-<name>-prd`, created by the ApplicationSet |
@@ -214,7 +219,8 @@ so it lives in one file, `envs/<env>/release.yaml`, and moves as one unit:
    merges minor/patch ones once CI passes;
 2. *Create → Promote to prd* in Backstage (or the *Releases* card on the service's page) checks
    that stg runs the release well (Argo CD: Synced, Healthy, on the image, deployed at least
-   10 minutes ago; Alertmanager: no warning/critical alert in `app-<name>-stg`), copies it to
+   10 minutes ago; Prometheus: no SLO burning its error budget faster than 1x over 30 minutes;
+   Alertmanager: no warning/critical alert in `app-<name>-stg`), copies it to
    `envs/prd/release.yaml`, asks for prd's value of any required env var prd doesn't set yet,
    removes the ones the release no longer needs, and opens the PR (`platform-lab:app:promote`,
    `backstage/app/packages/backend/src/plugins/scaffolderPromote.ts`);
@@ -572,7 +578,7 @@ GitHub Actions (`.github/workflows/`) runs on every pull request and push to `ma
 | Job | Checks |
 |---|---|
 | Terraform | `terraform fmt -check`, `init -backend=false` + `validate` for every module in `terraform/` |
-| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` plus every `apps/*` (rendered with its pinned chart and with the local `charts/app`) with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas) |
+| Helm & Kubernetes manifests | `helm lint --strict` on `charts/*`, renders each chart with the values its Argo CD Application uses, then validates the output and every manifest under `gitops/` plus every `apps/*` (rendered with its pinned chart and with the local `charts/app`) with kubeconform (Kubernetes + [CRDs-catalog](https://github.com/datreeio/CRDs-catalog) schemas); `promtool test rules` on the chart's SLO rules (`scripts/ci/test-slo-rules.sh`) |
 | Kyverno policy tests | `kyverno test gitops/`: every policy against the good/bad sample resources in `tests/` dirs; then `scripts/ci/check-app-policies.sh`: every `apps/*` must pass all lab policies |
 | Conventional Commits | commitlint on the PR's commits (`commitlint.config.mjs`); the PR title is checked too, since squash merges use it |
 | Workflow lint | actionlint on the workflows |
