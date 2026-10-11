@@ -257,16 +257,23 @@ export async function environmentSecrets(
   );
 }
 
+/** The image (repository:tag) a release runs, given the app's shared values.yaml. */
+export function imageOf(
+  shared: Values | undefined,
+  release: Values | undefined,
+): string | undefined {
+  const repository = shared?.app?.image?.repository;
+  const tag = release?.app?.image?.tag;
+  return repository && tag ? `${repository}:${tag}` : undefined;
+}
+
 /** The image the release in apps/<name>/envs/<env>/release.yaml runs (repository:tag). */
 export async function releaseImage(
   appDir: string,
   env: Environment,
 ): Promise<string | undefined> {
-  const shared = await readValues(path.join(appDir, 'values.yaml'));
-  const release = await readValues(
-    path.join(appDir, `envs/${env}/release.yaml`),
+  return imageOf(
+    await readValues(path.join(appDir, 'values.yaml')),
+    await readValues(path.join(appDir, `envs/${env}/release.yaml`)),
   );
-  const repository = shared?.app?.image?.repository;
-  const tag = release?.app?.image?.tag;
-  return repository && tag ? `${repository}:${tag}` : undefined;
 }

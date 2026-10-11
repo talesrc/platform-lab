@@ -55,6 +55,7 @@ The bell in the sidebar collects notifications for the owner of each component
 | Event | Sent by |
 |---|---|
 | Golden-path or promotion pull request opened | the template |
+| stg release ready to promote to prd (soaked, healthy, no alerts; prd behind) | the `ready-to-promote` backend plugin, once per stg release |
 | App deployed, sync failed, app degraded | Argo CD Notifications |
 | Alert firing / resolved | Alertmanager |
 
