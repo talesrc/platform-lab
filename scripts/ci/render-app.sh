@@ -35,8 +35,10 @@ PY
   fi
   helm dependency build "$work" >/dev/null
   if [ -n "$env" ]; then
+    # The Vault path is set by the ApplicationSet (valuesObject), like the route's hostname.
     helm template "$name" "$work" --namespace "app-$name-$env" \
-      --values "$work/envs/$env/values.yaml" --values "$work/envs/$env/release.yaml"
+      --values "$work/envs/$env/values.yaml" --values "$work/envs/$env/release.yaml" \
+      --set "app.secrets.vaultPath=apps/$name/$env"
   else
     helm template "$name" "$work" --namespace "app-$name"
   fi

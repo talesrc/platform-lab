@@ -60,6 +60,10 @@ spec:
             app:
               route:
                 hostname: "{{ .path.basename }}{{ .hostSuffix }}.apps.lab.localhost"
+              # Vault KV path of the app's secrets in this environment (secretEnv). The
+              # kyverno policy restrict-app-externalsecrets admits no other path here.
+              secrets:
+                vaultPath: "apps/{{ .path.basename }}/{{ .env }}"
       destination:
         server: https://kubernetes.default.svc
         namespace: "app-{{ .path.basename }}-{{ .env }}"

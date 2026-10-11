@@ -22,6 +22,41 @@
     "command": { "type": "array", "items": { "type": "string" } },
     "args": { "type": "array", "items": { "type": "string" } },
     "env": { "type": "object", "additionalProperties": { "type": "string" } },
+    "secretEnv": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/definitions/envName" },
+      "description": "Env vars from Vault (secret/<secrets.vaultPath>/<name>, field value), by secretKeyRef."
+    },
+    "generatedSecretEnv": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/definitions/envName" },
+      "additionalProperties": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "properties": {
+          "length": { "type": "integer", "minimum": 16, "maximum": 128 },
+          "digits": { "type": "integer", "minimum": 0 },
+          "symbols": { "type": "integer", "minimum": 0 },
+          "symbolCharacters": { "type": "string", "minLength": 1 },
+          "noUpper": { "type": "boolean" },
+          "allowRepeat": { "type": "boolean" }
+        }
+      },
+      "description": "Env vars with random values from an External Secrets Password generator, made once."
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "vaultPath": {
+          "type": "string",
+          "pattern": "^(apps/[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z]+)?$",
+          "description": "apps/<name>/<env>; set by the apps ApplicationSet."
+        },
+        "store": { "type": "string", "minLength": 1 },
+        "refreshInterval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" }
+      }
+    },
     "replicas": { "type": "integer", "minimum": 1 },
     "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
     "service": {
@@ -70,6 +105,7 @@
     }
   },
   "definitions": {
+    "envName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
     "probe": {
       "type": "object",
       "required": ["path"],
