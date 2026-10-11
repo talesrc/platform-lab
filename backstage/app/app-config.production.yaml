@@ -76,6 +76,10 @@ catalog:
   # Be gentle with GitHub's API rate limit.
   processingInterval:
     minutes: 10
+  # The catalog lives in git: an entity no location emits any more is removed, instead of
+  # kept as an orphan. That also lets an entity move between files (podinfo, from the root
+  # catalog-info.yaml to apps/podinfo/) without the orphan blocking the new one.
+  orphanStrategy: delete
   rules:
     - allow: [Component, System, API, Resource, Location, Domain, Group, User, Template]
   locations:
