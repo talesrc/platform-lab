@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://kyverno.github.io/policy-reporter
     chart: policy-reporter
-    targetRevision: 3.11.0
+    targetRevision: 3.11.2
     helm:
       valuesObject:
         # The REST API (/v1/...) is what the Backstage plugin reads; the chart disables it by
